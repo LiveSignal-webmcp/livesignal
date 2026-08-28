@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./adapter.css";
+import "./discovery.css";
 
 type StreamEvent = {
   id: string;
@@ -12,6 +13,16 @@ type StreamEvent = {
   detail: string;
   quote: string;
 };
+
+type StreamSearch = { id: "youtube" | "twitch"; platform: string; title: string; detail: string; url: string };
+
+function makeStreamSearches(query: string): StreamSearch[] {
+  const topic = query.trim() || "live streams";
+  return [
+    { id: "youtube", platform: "YouTube", title: `Search YouTube Live for “${topic}”`, detail: "Open current YouTube results, then let LiveSignal adapt the selected player.", url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${topic} live`)}` },
+    { id: "twitch", platform: "Twitch", title: `Search Twitch for “${topic}”`, detail: "Open current Twitch results, then use LiveSignal on the stream page.", url: `https://www.twitch.tv/search?term=${encodeURIComponent(topic)}` },
+  ];
+}
 
 const events: StreamEvent[] = [
   { id: "launch", time: "00:02:10", seconds: 130, type: "Milestone", title: "The run begins", detail: "The creator starts a new challenge run.", quote: "We are going for a clean run today." },
@@ -33,6 +44,8 @@ export default function Home() {
   const [watchTopic, setWatchTopic] = useState("Ethereum");
   const [watchRules, setWatchRules] = useState<string[]>(["Release date"]);
   const [detectedEvent, setDetectedEvent] = useState<StreamEvent | null>(null);
+  const [discoveryQuery, setDiscoveryQuery] = useState("Ethereum updates");
+  const [selectedSearchId, setSelectedSearchId] = useState<StreamSearch["id"] | null>(null);
   const registered = useRef(false);
   const streamEvents = useMemo(() => detectedEvent ? [...events, detectedEvent] : events, [detectedEvent]);
   const selected = streamEvents.find((event) => event.id === selectedId) ?? events[0];
@@ -42,6 +55,7 @@ export default function Home() {
     const term = query.trim().toLowerCase();
     return term ? streamEvents.filter((event) => `${event.title} ${event.detail} ${event.quote}`.toLowerCase().includes(term)) : streamEvents;
   }, [query, streamEvents]);
+  const streamSearches = useMemo(() => makeStreamSearches(discoveryQuery), [discoveryQuery]);
 
   function selectEvent(event: StreamEvent) { setSelectedId(event.id); setIsPlaying(false); }
   function addWatchRule(topic = watchTopic) {
@@ -55,6 +69,10 @@ export default function Home() {
     setDetectedEvent(event);
     setSelectedId(event.id);
     setIsPlaying(false);
+  }
+  function openStreamSearch(source: StreamSearch) {
+    setSelectedSearchId(source.id);
+    window.open(source.url, "_blank", "noopener,noreferrer");
   }
 
   useEffect(() => {
@@ -81,6 +99,17 @@ export default function Home() {
       window.setTimeout(() => triggerWatchEvent(topic), 2400);
       return { ok: Boolean(topic), topic, status: "active" };
     }, { type: "object", properties: { topic: { type: "string", description: "Topic or phrase to monitor in this stream." } }, required: ["topic"] });
+    tool("search_livestreams", "Finds current YouTube Live and Twitch search pages for a topic. Use this before opening a stream to monitor.", (input) => {
+      const search = String(input.query ?? "").trim();
+      return makeStreamSearches(search);
+    }, { type: "object", properties: { query: { type: "string", description: "The topic, person, game, or event to find live streams about." } }, required: ["query"] });
+    tool("open_livestream_search", "Opens a selected platform's current stream-search page in a new browser tab. Use only when the user asks to browse results.", (input) => {
+      const search = String(input.query ?? "").trim();
+      const platform = String(input.platform ?? "youtube").toLowerCase();
+      const source = makeStreamSearches(search).find((item) => item.id === platform) ?? makeStreamSearches(search)[0];
+      openStreamSearch(source);
+      return { ok: true, platform: source.platform, url: source.url, nextStep: "Open a result, then use the LiveSignal extension on the stream player." };
+    }, { type: "object", properties: { query: { type: "string", description: "The live-stream topic to search for." }, platform: { type: "string", enum: ["youtube", "twitch"], description: "Platform whose results page should open." } }, required: ["query"] });
   // WebMCP tools deliberately register once for the active stream page.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -88,7 +117,7 @@ export default function Home() {
   return <main>
     <nav className="topbar" aria-label="Primary navigation">
       <a className="brand" href="#top" aria-label="LiveSignal home"><span className="brand-mark" />LiveSignal</a>
-      <div className="nav-links"><a href="#watch">Watch</a><a href="#events">Events</a><a href="#how-it-works">How it works</a></div>
+      <div className="nav-links"><a href="#discover">Discover</a><a href="#watch">Watch</a><a href="#events">Events</a><a href="#how-it-works">How it works</a></div>
       <button className="outline-button" type="button">Open extension</button>
     </nav>
 
@@ -98,6 +127,11 @@ export default function Home() {
       <p>LiveSignal turns streams into evidence-backed events. Ask an agent what happened, what matters, and where to find it.</p>
       <div className="hero-actions"><a className="primary-button" href="#watch">Explore the live demo <span>→</span></a><a className="text-button" href="#how-it-works">See how it works</a></div>
       <div className="signal-line" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
+    </section>
+
+    <section className="discovery" id="discover" aria-label="Find a livestream to monitor">
+      <div className="discovery-copy"><p className="eyebrow">STREAM DISCOVERY</p><h2>Find the stream.<br />Then find the signal.</h2><p>Ask your agent to search a topic. LiveSignal opens current platform results, and the extension activates once a stream is selected.</p></div>
+      <div className="discovery-tool"><div className="discovery-input"><span>⌕</span><input value={discoveryQuery} onChange={(event) => setDiscoveryQuery(event.target.value)} aria-label="Topic to find livestreams about" placeholder="e.g. Ethereum updates" /><button type="button">Find streams</button></div><p className="discovery-hint">Try: “Find a live stream about Ethereum updates on YouTube.”</p><div className="search-results">{streamSearches.map((source) => <article key={source.id} className={`source-card ${selectedSearchId === source.id ? "selected-source" : ""}`}><span className={`platform-tag ${source.id}`}>{source.platform}</span><div><h3>{source.title}</h3><p>{source.detail}</p></div><button type="button" onClick={() => openStreamSearch(source)}>Open results ↗</button></article>)}</div></div>
     </section>
 
     <section className="workspace" id="watch" aria-label="Live stream monitoring demo">
