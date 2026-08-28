@@ -1,0 +1,9 @@
+.adapter-bar { padding: 11px 30px; background: #171717; color: #f7f7f2; display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.adapter-bar b { color: var(--lime); }
+.adapter-icon { color: var(--lime); font-size: 17px; }
+.adapter-bar button { margin-left: auto; background: var(--lime); border: 0; border-radius: 99px; padding: 6px 11px; font-size: 11px; font-weight: 800; color: #161616; }
+.signal-notice { width: 100%; border: 0; border-bottom: 1px solid #e0d9fd; background: #f0edff; padding: 12px 30px; display: flex; align-items: center; gap: 11px; text-align: left; }
+.signal-notice span:nth-child(2) { display: flex; flex-direction: column; gap: 2px; }
+.signal-notice small { color: #675c8e; font-size: 11px; }
+.signal-notice strong { margin-left: auto; font-size: 12px; }
+@media (max-width: 800px) { .adapter-bar { padding: 11px 20px; align-items: flex-start; } .adapter-bar button { margin-left: 0; white-space: nowrap; } .signal-notice { padding: 12px 20px; } }

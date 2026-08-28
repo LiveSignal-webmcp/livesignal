@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "LiveSignal",
+  "short_name": "LiveSignal",
+  "version": "0.1.0",
+  "description": "Give agents structured access to supported livestream players.",
+  "minimum_chrome_version": "149",
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://www.twitch.tv/*"],
+      "js": ["main-world.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.youtube.com/*", "https://www.twitch.tv/*"],
+      "js": ["status-badge.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
