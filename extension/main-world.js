@@ -1,6 +1,7 @@
 (() => {
   if (window.__liveSignalAdapterInstalled) return;
   window.__liveSignalAdapterInstalled = true;
+  document.documentElement.dataset.livesignalAdapter = "active";
 
   const MAX_TRANSCRIPT_SEGMENTS = 300;
   const watchRules = new Set();
@@ -18,10 +19,10 @@
 
   const transcriptSegments = () => {
     if (!isYouTube()) return [];
-    return Array.from(document.querySelectorAll("ytd-transcript-segment-renderer"))
+    return Array.from(document.querySelectorAll("ytd-transcript-segment-renderer, transcript-segment-view-model"))
       .map((node, index) => {
-        const timestamp = node.querySelector("#timestamp, .segment-timestamp")?.textContent?.trim() || "";
-        const text = node.querySelector(".segment-text, yt-formatted-string.segment-text")?.textContent?.trim() || "";
+        const timestamp = node.querySelector("#timestamp, .segment-timestamp, .ytwTranscriptSegmentViewModelTimestamp")?.textContent?.trim() || "";
+        const text = node.querySelector(".segment-text, yt-formatted-string.segment-text, [role='text'], .ytAttributedStringHost")?.textContent?.trim() || "";
         const seconds = parseTimestamp(timestamp);
         if (!text || seconds === null) return null;
         return { id: `transcript-${index}-${seconds}`, timestamp, seconds, text };
@@ -140,6 +141,8 @@
   window.addEventListener("pagehide", () => window.clearInterval(scanTimer), { once: true });
 
   const context = document.modelContext;
+  document.documentElement.dataset.livesignalWebmcp = context ? "available" : "unavailable";
+  window.postMessage({ source: "livesignal", type: "adapter-status", payload: { adapter: "active", webmcp: Boolean(context) } }, location.origin);
   if (!context) {
     publish();
     return;
