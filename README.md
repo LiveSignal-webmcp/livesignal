@@ -1,100 +1,85 @@
-# vinext-starter
+# LiveSignal
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+**Turn livestream watch time into searchable evidence.**
 
-## Prerequisites
+LiveSignal is a WebMCP prototype for agents that need to gather information from livestreams when a person does not have time to watch. It helps an agent find streams on existing platforms, search evidence inside a supported stream, create focused watch rules, and jump to the exact moment that supports an answer.
 
-- Node.js `>=22.13.0`
+It is deliberately an adapter, not a streaming platform. The Companion web app demonstrates the interaction design; the browser extension exposes semantic tools on YouTube and Twitch pages.
 
-## Quick Start
+## The problem
+
+Important information lands in long livestreams: product announcements, a creator's opinion, a game update, a release date. Existing agents can navigate a player, but that does not make the stream queryable or provide evidence for an answer.
+
+## What is implemented
+
+### Companion web app
+
+- WebMCP tools for stream discovery, event search, timestamp navigation, and in-page watch rules.
+- A visual timeline that demonstrates an evidence-backed agent workflow.
+- Search links for current YouTube Live and Twitch results.
+
+The Companion timeline is explicitly seeded demo data. It is used to make the product interaction legible during the demo; it is not represented as live stream analysis.
+
+### Browser adapter
+
+- **YouTube:** normalized player state, visible transcript retrieval, transcript search, event generation from transcript watch rules, and timestamp navigation.
+- **Twitch:** normalized player state and timestamp navigation where the player provides a playback window.
+- A small in-page status badge so a person can see when LiveSignal is active.
+
+On YouTube, LiveSignal only indexes timestamped transcript text that the platform renders in its own transcript panel. It does not claim to transcribe audio, understand visual scenes, or continue monitoring after the tab is refreshed or closed.
+
+## WebMCP tool surface
+
+### Companion page
+
+- `get_stream_info`
+- `get_recent_events`
+- `search_stream`
+- `jump_to_event`
+- `create_watch_rule`
+- `search_livestreams`
+- `open_livestream_search`
+
+### Browser adapter
+
+- `get_current_stream_state`
+- `get_transcript`
+- `search_stream`
+- `get_recent_events`
+- `create_watch_rule`
+- `get_active_watch_rules`
+- `jump_to_timestamp`
+- `jump_to_event`
+
+## Try the real YouTube path
+
+1. Start the web app with `npm run dev`.
+2. In a compatible Chrome build, enable WebMCP.
+3. Open `chrome://extensions`, enable Developer mode, then load `extension/` as an unpacked extension.
+4. Open a YouTube video or live replay with a transcript, then open YouTube's transcript panel.
+5. Ask your agent: “Search this stream for Ethereum and show me the evidence.”
+6. Ask: “Monitor this transcript for a release date.” Then use `get_recent_events` and `jump_to_event` when a matching line appears.
+
+## Local development
 
 ```bash
 npm install
 npm run dev
+```
+
+Validate the production build with:
+
+```bash
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Design choices and limits
 
-## Included Shape
+- **One reliable proof path first:** transcript-backed YouTube search and seeks are more demonstrable than claiming universal multimodal livestream understanding.
+- **No invented data:** a missing transcript is reported as missing, with guidance to open YouTube's transcript panel.
+- **No false background-monitoring claim:** watch rules are intentionally in-page and scoped to the current browser tab.
+- **Platform compatibility:** the extension is a prototype and is not affiliated with YouTube or Twitch. Platform DOM changes may require adapter updates.
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+## License
 
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+[MIT](LICENSE)

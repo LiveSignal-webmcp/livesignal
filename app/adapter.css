@@ -1,4 +1,4 @@
-.adapter-bar { padding: 11px 30px; background: #171717; color: #f7f7f2; display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.adapter-bar { padding: 11px 30px; background: #171717; color: #f7f7f2; display: flex; gap: 10px; align-items: center; font-size: 12px; line-height: 1.35; }
 .adapter-bar b { color: var(--lime); }
 .adapter-icon { color: var(--lime); font-size: 17px; }
 .adapter-bar button { margin-left: auto; background: var(--lime); border: 0; border-radius: 99px; padding: 6px 11px; font-size: 11px; font-weight: 800; color: #161616; }

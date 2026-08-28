@@ -118,7 +118,7 @@ export default function Home() {
     <nav className="topbar" aria-label="Primary navigation">
       <a className="brand" href="#top" aria-label="LiveSignal home"><span className="brand-mark" />LiveSignal</a>
       <div className="nav-links"><a href="#discover">Discover</a><a href="#watch">Watch</a><a href="#events">Events</a><a href="#how-it-works">How it works</a></div>
-      <button className="outline-button" type="button">Open extension</button>
+      <a className="outline-button" href="#how-it-works">How it works</a>
     </nav>
 
     <section className="hero" id="top">
@@ -131,12 +131,12 @@ export default function Home() {
 
     <section className="discovery" id="discover" aria-label="Find a livestream to monitor">
       <div className="discovery-copy"><p className="eyebrow">STREAM DISCOVERY</p><h2>Find the stream.<br />Then find the signal.</h2><p>Ask your agent to search a topic. LiveSignal opens current platform results, and the extension activates once a stream is selected.</p></div>
-      <div className="discovery-tool"><div className="discovery-input"><span>⌕</span><input value={discoveryQuery} onChange={(event) => setDiscoveryQuery(event.target.value)} aria-label="Topic to find livestreams about" placeholder="e.g. Ethereum updates" /><button type="button">Find streams</button></div><p className="discovery-hint">Try: “Find a live stream about Ethereum updates on YouTube.”</p><div className="search-results">{streamSearches.map((source) => <article key={source.id} className={`source-card ${selectedSearchId === source.id ? "selected-source" : ""}`}><span className={`platform-tag ${source.id}`}>{source.platform}</span><div><h3>{source.title}</h3><p>{source.detail}</p></div><button type="button" onClick={() => openStreamSearch(source)}>Open results ↗</button></article>)}</div></div>
+      <div className="discovery-tool"><div className="discovery-input"><span>⌕</span><input value={discoveryQuery} onChange={(event) => setDiscoveryQuery(event.target.value)} aria-label="Topic to find livestreams about" placeholder="e.g. Ethereum updates" /><button type="button" onClick={() => openStreamSearch(streamSearches[0])}>Find streams</button></div><p className="discovery-hint">Try: “Find a live stream about Ethereum updates on YouTube.”</p><div className="search-results">{streamSearches.map((source) => <article key={source.id} className={`source-card ${selectedSearchId === source.id ? "selected-source" : ""}`}><span className={`platform-tag ${source.id}`}>{source.platform}</span><div><h3>{source.title}</h3><p>{source.detail}</p></div><button type="button" onClick={() => openStreamSearch(source)}>Open results ↗</button></article>)}</div></div>
     </section>
 
     <section className="workspace" id="watch" aria-label="Live stream monitoring demo">
-      <div className="stream-header"><div><p className="overline">WATCHING NOW</p><h2>The Level Up Live Show</h2><p className="muted">Maya Chen · Gameplay, product news &amp; community</p></div><div className="stream-status"><span className="live-dot" /> LIVE REPLAY <b>●</b> 1.8K watching</div></div>
-      <div className="adapter-bar"><span className="adapter-icon">↗</span><span><b>Browser adapter ready</b> · Player state and semantic events are available to your agent.</span><button type="button" onClick={() => triggerWatchEvent()}>Simulate a signal</button></div>
+      <div className="stream-header"><div><p className="overline">COMPANION DEMO</p><h2>The Level Up Live Show</h2><p className="muted">Illustrative timeline · seeded evidence for the WebMCP interaction demo</p></div><div className="stream-status"><span className="live-dot" /> LIVE REPLAY <b>●</b> 1.8K watching</div></div>
+      <div className="adapter-bar"><span className="adapter-icon">↗</span><span><b>Browser adapter prototype</b> · The extension uses real, visible YouTube transcript evidence; this Companion timeline is demo data.</span><button type="button" onClick={() => triggerWatchEvent()}>Add demo signal</button></div>
       {detectedEvent && <button className="signal-notice" type="button" onClick={() => selectEvent(detectedEvent)}><span className="live-dot" /><span><b>New signal: {detectedEvent.title}</b><small>{detectedEvent.time} · View matching evidence</small></span><strong>Show →</strong></button>}
       <div className="monitor-grid">
         <div className="player-panel" aria-label="Stream player">
@@ -151,7 +151,7 @@ export default function Home() {
       </div>
     </section>
 
-    <section className="how" id="how-it-works"><div><p className="eyebrow">BUILT FOR AGENTS, PROVEN FOR HUMANS</p><h2>From a long stream<br />to a clear answer.</h2></div><div className="steps"><p><b>01</b><span>LiveSignal reads stream state, captions, and signals.</span></p><p><b>02</b><span>It creates a compact timeline of evidence-backed events.</span></p><p><b>03</b><span>WebMCP lets an agent search, explain, and show the source.</span></p></div></section>
+    <section className="how" id="how-it-works"><div><p className="eyebrow">BUILT FOR AGENTS, PROVEN FOR HUMANS</p><h2>From a long stream<br />to a clear answer.</h2></div><div className="steps"><p><b>01</b><span>LiveSignal reads player state and transcript evidence that the platform exposes.</span></p><p><b>02</b><span>It turns matching transcript lines into timestamped, evidence-backed signals.</span></p><p><b>03</b><span>WebMCP lets an agent search, explain, and show the exact moment.</span></p></div></section>
     <footer><a className="brand" href="#top"><span className="brand-mark" />LiveSignal</a><p>Turn watch time into useful signal.</p><span>WebMCP experiment · 2026</span></footer>
   </main>;
 }
