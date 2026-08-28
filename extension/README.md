@@ -28,4 +28,6 @@ The YouTube proof path intentionally uses only transcript text that YouTube make
 4. Ask an agent: “Search this stream for Ethereum and show me the evidence.”
 5. Ask: “Monitor this transcript for a release date.” Then use `get_recent_events` to see any matching timestamped signal.
 
+The in-page badge reads **LiveSignal active** only after every tool has registered. It reports a specific unavailable or registration-failed state instead of implying that a bridge is usable when it is not.
+
 This is a hackathon prototype, not an official YouTube or Twitch integration.
