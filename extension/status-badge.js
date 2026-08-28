@@ -1,8 +1,11 @@
+/* global chrome */
+
 (() => {
   if (document.getElementById("livesignal-status-badge")) return;
   const badge = document.createElement("button");
   badge.id = "livesignal-status-badge";
   badge.type = "button";
+  let transcriptionState = { status: "idle", segments: [], partial: "", error: null };
   const renderStatus = () => {
     const webmcp = document.documentElement.dataset.livesignalWebmcp;
     const adapter = document.documentElement.dataset.livesignalAdapter;
@@ -26,8 +29,25 @@
       badge.title = "The page adapter is active, but this Chrome session does not expose document.modelContext. Enable WebMCP, then reload this page.";
       return;
     }
+    if (transcriptionState.status === "connecting") {
+      badge.textContent = "● LiveSignal · connecting audio";
+      badge.title = "LiveSignal is connecting this tab to ElevenLabs Scribe realtime transcription.";
+      return;
+    }
+    if (transcriptionState.status === "listening") {
+      badge.textContent = transcriptionState.partial
+        ? `● Listening · ${transcriptionState.partial.slice(0, 42)}`
+        : `● LiveSignal listening · ${transcriptionState.segments.length} segments`;
+      badge.title = "Realtime transcript evidence is being captured. Click the LiveSignal toolbar icon to stop.";
+      return;
+    }
+    if (transcriptionState.status === "error") {
+      badge.textContent = "● LiveSignal · listening error";
+      badge.title = transcriptionState.error || "Realtime transcription failed. Click the LiveSignal toolbar icon to retry.";
+      return;
+    }
     badge.textContent = "● LiveSignal active";
-    badge.title = "LiveSignal can share player state and visible YouTube transcript evidence with WebMCP agents on this page.";
+    badge.title = "LiveSignal can share stream evidence with WebMCP. Click the LiveSignal toolbar icon to start realtime listening.";
   };
   renderStatus();
   Object.assign(badge.style, {
@@ -38,11 +58,29 @@
   });
   badge.addEventListener("click", () => {
     window.postMessage({ source: "livesignal", type: "request-state" }, location.origin);
-    badge.textContent = "● Stream state shared";
+    badge.textContent = transcriptionState.status === "listening"
+      ? "● Realtime evidence shared"
+      : "● Click toolbar icon to listen";
     window.setTimeout(renderStatus, 1800);
   });
   window.addEventListener("message", (event) => {
     if (event.source === window && event.data?.source === "livesignal" && event.data?.type === "adapter-status") renderStatus();
   });
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "LIVESIGNAL_TRANSCRIPTION_STATE") return;
+    transcriptionState = message.payload || transcriptionState;
+    window.postMessage({
+      source: "livesignal",
+      type: "live-transcription-state",
+      payload: transcriptionState
+    }, location.origin);
+    renderStatus();
+  });
+  chrome.runtime.sendMessage({ type: "GET_TRANSCRIPTION_STATE" }).then((state) => {
+    if (!state) return;
+    transcriptionState = state;
+    window.postMessage({ source: "livesignal", type: "live-transcription-state", payload: state }, location.origin);
+    renderStatus();
+  }).catch(() => {});
   document.documentElement.append(badge);
 })();

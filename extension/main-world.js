@@ -7,17 +7,33 @@
   const watchRules = new Set();
   const events = [];
   const seenMatches = new Set();
+  const liveSegmentMap = new Map();
+  let liveTranscription = {
+    status: "idle",
+    provider: "ElevenLabs Scribe v2 Realtime",
+    partial: "",
+    error: null
+  };
 
   const getVideo = () => document.querySelector("video");
   const isYouTube = () => location.hostname.includes("youtube.com");
   const round = (value) => Math.round(value * 10) / 10;
+  const formatTimestamp = (totalSeconds) => {
+    const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const seconds = safeSeconds % 60;
+    return hours
+      ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+      : `${minutes}:${String(seconds).padStart(2, "0")}`;
+  };
   const parseTimestamp = (value) => {
     const parts = String(value || "").trim().split(":").map(Number);
     if (!parts.length || parts.some((part) => !Number.isFinite(part))) return null;
     return parts.reduce((total, part) => total * 60 + part, 0);
   };
 
-  const transcriptSegments = () => {
+  const nativeTranscriptSegments = () => {
     if (!isYouTube()) return [];
     return Array.from(document.querySelectorAll("ytd-transcript-segment-renderer, transcript-segment-view-model"))
       .map((node, index) => {
@@ -31,14 +47,30 @@
       .slice(-MAX_TRANSCRIPT_SEGMENTS);
   };
 
+  const transcriptSegments = () => [
+    ...nativeTranscriptSegments(),
+    ...Array.from(liveSegmentMap.values())
+  ]
+    .sort((a, b) => (a.seconds ?? 0) - (b.seconds ?? 0))
+    .slice(-MAX_TRANSCRIPT_SEGMENTS);
+
   const transcriptAvailability = () => {
     const segments = transcriptSegments();
+    const nativeCount = nativeTranscriptSegments().length;
+    const liveCount = liveSegmentMap.size;
     return {
       available: segments.length > 0,
       segmentCount: segments.length,
+      nativeSegmentCount: nativeCount,
+      liveSegmentCount: liveCount,
+      source: liveCount ? "realtime_stt" : nativeCount ? "youtube_transcript" : "none",
       guidance: segments.length
-        ? "Transcript evidence is available from the YouTube transcript panel."
-        : "Open YouTube's transcript panel for this video or replay, then try again. LiveSignal only indexes transcript text that YouTube makes visible on the page."
+        ? liveCount
+          ? "Realtime transcript evidence is available from ElevenLabs Scribe."
+          : "Transcript evidence is available from the YouTube transcript panel."
+        : liveTranscription.status === "listening"
+          ? "LiveSignal is listening; wait for the first committed speech segment."
+          : "Open YouTube's transcript panel, or click the LiveSignal toolbar icon once to start realtime listening."
     };
   };
 
@@ -53,6 +85,13 @@
       currentTime: video ? round(video.currentTime) : null,
       duration: video && Number.isFinite(video.duration) ? round(video.duration) : null,
       paused: video?.paused ?? null,
+      liveTranscription: {
+        status: liveTranscription.status,
+        provider: liveTranscription.provider,
+        partial: liveTranscription.partial,
+        segmentCount: liveSegmentMap.size,
+        error: liveTranscription.error
+      },
       transcript: transcriptAvailability()
     };
   };
@@ -130,7 +169,38 @@
   };
 
   window.addEventListener("message", (event) => {
-    if (event.source !== window || event.data?.source !== "livesignal" || event.data?.type !== "request-state") return;
+    if (event.source !== window || event.data?.source !== "livesignal") return;
+    if (event.data?.type === "request-state") {
+      publish();
+      return;
+    }
+    if (event.data?.type !== "live-transcription-state") return;
+
+    const payload = event.data.payload || {};
+    liveTranscription = {
+      status: payload.status || "idle",
+      provider: payload.provider || "ElevenLabs Scribe v2 Realtime",
+      partial: payload.partial || "",
+      error: payload.error || null
+    };
+    document.documentElement.dataset.livesignalTranscription = liveTranscription.status;
+
+    (payload.segments || []).forEach((segment) => {
+      if (!segment?.id || !segment.text || liveSegmentMap.has(segment.id)) return;
+      const video = getVideo();
+      const seconds = video && Number.isFinite(video.currentTime) ? round(video.currentTime) : null;
+      liveSegmentMap.set(segment.id, {
+        ...segment,
+        id: `live-${segment.id}`,
+        timestamp: seconds === null ? "live" : formatTimestamp(seconds),
+        seconds,
+        source: "realtime_stt"
+      });
+    });
+    while (liveSegmentMap.size > MAX_TRANSCRIPT_SEGMENTS) {
+      liveSegmentMap.delete(liveSegmentMap.keys().next().value);
+    }
+    createEventsFromTranscript();
     publish();
   });
 
@@ -157,12 +227,12 @@
   };
   register({
     name: "get_current_stream_state",
-    description: "Returns normalized player state for the active YouTube or Twitch page, including whether transcript evidence is currently available.",
+    description: "Returns normalized player state for the active YouTube or Twitch page, including native transcript and realtime listening status.",
     execute: () => getState()
   });
   register({
     name: "get_transcript",
-    description: "Returns visible timestamped transcript evidence from a YouTube video or live replay. If it is unavailable, explains how to enable the transcript panel.",
+    description: "Returns timestamped transcript evidence from a visible YouTube transcript or LiveSignal's realtime ElevenLabs transcription. If neither is available, explains how to enable listening.",
     inputSchema: {
       type: "object",
       properties: { limit: { type: "number", description: "Maximum number of most recent transcript segments to return (default 80, maximum 300)." } }
@@ -175,7 +245,7 @@
   });
   register({
     name: "search_stream",
-    description: "Searches visible YouTube transcript evidence for a topic or phrase and returns timestamped matches that can be opened in the player.",
+    description: "Searches native or realtime livestream transcript evidence for a topic or phrase and returns timestamped matches that can be opened in the player.",
     inputSchema: {
       type: "object",
       properties: { query: { type: "string", description: "Topic, person, or phrase to find in the active stream transcript." } },
@@ -193,7 +263,7 @@
   });
   register({
     name: "create_watch_rule",
-    description: "Creates an in-page rule that monitors visible and newly rendered YouTube transcript evidence for a topic. The rule lasts until this tab is refreshed or closed.",
+    description: "Creates an in-page rule that monitors native and realtime transcript evidence for a topic. The rule lasts until this tab is refreshed or closed.",
     inputSchema: {
       type: "object",
       properties: { topic: { type: "string", description: "Case-insensitive word or phrase to monitor in transcript evidence." } },

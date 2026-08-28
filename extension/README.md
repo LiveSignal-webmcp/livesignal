@@ -4,10 +4,10 @@ This Manifest V3 extension makes supported livestream pages useful to WebMCP-ena
 
 ## What works today
 
-- **YouTube**: player state, visible transcript evidence, transcript search, timestamp seek, and in-tab transcript watch rules.
-- **Twitch**: normalized player state and timestamp seek when the player exposes a seekable playback window.
+- **YouTube**: player state, visible transcript evidence, realtime tab-audio transcription, transcript search, timestamp seek, and in-tab transcript watch rules.
+- **Twitch**: normalized player state, realtime tab-audio transcription, and timestamp seek when the player exposes a seekable playback window.
 
-The YouTube proof path intentionally uses only transcript text that YouTube makes visible in its own transcript panel. Open that panel before asking the agent to search or monitor it. Watch rules are local to the current tab and disappear when the tab is refreshed; this prototype does not claim background monitoring, audio transcription, or visual scene understanding.
+LiveSignal prefers transcript text that YouTube makes visible in its own transcript panel. When a true livestream does not expose one, click the LiveSignal toolbar icon once to start ElevenLabs Scribe v2 Realtime transcription of that tab's audio. Click it again to stop. Watch rules are local to the current tab and disappear when the tab is refreshed; this prototype does not claim visual scene understanding.
 
 ## WebMCP tools
 
@@ -24,9 +24,12 @@ The YouTube proof path intentionally uses only transcript text that YouTube make
 
 1. Enable WebMCP in a compatible Chrome build.
 2. Go to `chrome://extensions`, enable Developer mode, and load this `extension/` directory unpacked.
-3. Open a YouTube video or live replay with a transcript. Open YouTube's transcript panel.
-4. Ask an agent: “Search this stream for Ethereum and show me the evidence.”
-5. Ask: “Monitor this transcript for a release date.” Then use `get_recent_events` to see any matching timestamped signal.
+3. Open a YouTube or Twitch livestream. If YouTube has no transcript panel, click the LiveSignal toolbar icon once and wait for the badge to say **LiveSignal listening**.
+4. Ask an agent: “What are they discussing right now? Use the recent transcript as evidence.”
+5. Ask: “Search this stream for Ethereum and show me the evidence.”
+6. Ask: “Monitor this transcript for a release date.” Then use `get_recent_events` to see any matching timestamped signal.
+
+Realtime transcription requires the deployed LiveSignal Companion to have an `ELEVENLABS_API_KEY` server environment variable. The key is never bundled with the extension: the Companion mints a single-use Scribe token for each listening session.
 
 The in-page badge reads **LiveSignal active** only after every tool has registered. It reports a specific unavailable or registration-failed state instead of implying that a bridge is usable when it is not.
 

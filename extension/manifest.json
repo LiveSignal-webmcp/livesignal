@@ -2,9 +2,21 @@
   "manifest_version": 3,
   "name": "LiveSignal",
   "short_name": "LiveSignal",
-  "version": "0.1.0",
-  "description": "Give agents structured access to supported livestream players.",
+  "version": "0.2.0",
+  "description": "Give agents structured access to livestream players and realtime speech evidence.",
   "minimum_chrome_version": "149",
+  "permissions": ["offscreen", "storage", "tabCapture"],
+  "host_permissions": [
+    "https://livesignal-chi.vercel.app/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_title": "Start or stop LiveSignal listening"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*", "https://www.twitch.tv/*"],
