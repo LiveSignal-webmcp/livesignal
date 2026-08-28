@@ -11,7 +11,17 @@
       badge.title = "The LiveSignal browser badge loaded, but its page adapter did not. Reload the extension and this page.";
       return;
     }
-    if (webmcp !== "available") {
+    if (webmcp === "registering") {
+      badge.textContent = "● LiveSignal · registering tools";
+      badge.title = "The LiveSignal adapter found WebMCP and is registering its semantic livestream tools.";
+      return;
+    }
+    if (webmcp === "error") {
+      badge.textContent = "● LiveSignal · tool registration failed";
+      badge.title = "The page exposes WebMCP, but one or more LiveSignal tools could not register. Reload this page and inspect the extension source for details.";
+      return;
+    }
+    if (webmcp !== "registered") {
       badge.textContent = "● LiveSignal · WebMCP unavailable";
       badge.title = "The page adapter is active, but this Chrome session does not expose document.modelContext. Enable WebMCP, then reload this page.";
       return;

@@ -141,14 +141,20 @@
   window.addEventListener("pagehide", () => window.clearInterval(scanTimer), { once: true });
 
   const context = document.modelContext;
-  document.documentElement.dataset.livesignalWebmcp = context ? "available" : "unavailable";
+  document.documentElement.dataset.livesignalWebmcp = context ? "registering" : "unavailable";
   window.postMessage({ source: "livesignal", type: "adapter-status", payload: { adapter: "active", webmcp: Boolean(context) } }, location.origin);
   if (!context) {
     publish();
     return;
   }
 
-  const register = (tool) => context.registerTool(tool).catch(() => undefined);
+  const registrations = [];
+  const register = (tool) => {
+    const registration = context.registerTool(tool)
+      .then(() => ({ name: tool.name, ok: true }))
+      .catch((error) => ({ name: tool.name, ok: false, error: String(error?.message || error) }));
+    registrations.push(registration);
+  };
   register({
     name: "get_current_stream_state",
     description: "Returns normalized player state for the active YouTube or Twitch page, including whether transcript evidence is currently available.",
@@ -226,5 +232,18 @@
     },
     execute: ({ eventId }) => jumpToEvent(String(eventId || ""))
   });
-  publish();
+  Promise.all(registrations).then((results) => {
+    const failed = results.filter((result) => !result.ok);
+    document.documentElement.dataset.livesignalWebmcp = failed.length ? "error" : "registered";
+    document.documentElement.dataset.livesignalTools = results.filter((result) => result.ok).map((result) => result.name).join(",");
+    if (failed.length) {
+      document.documentElement.dataset.livesignalWebmcpErrors = failed.map((result) => result.name).join(",");
+    }
+    window.postMessage({
+      source: "livesignal",
+      type: "adapter-status",
+      payload: { adapter: "active", webmcp: !failed.length, registeredTools: results.filter((result) => result.ok).map((result) => result.name), failedTools: failed.map((result) => result.name) }
+    }, location.origin);
+    publish();
+  });
 })();
