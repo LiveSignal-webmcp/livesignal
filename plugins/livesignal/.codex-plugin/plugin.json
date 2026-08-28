@@ -1,0 +1,18 @@
+{
+  "name": "livesignal",
+  "version": "0.1.0",
+  "description": "Evidence-first livestream research workflow for WebMCP agents.",
+  "author": {
+    "name": "LiveSignal"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "LiveSignal",
+    "shortDescription": "Find evidence in livestreams.",
+    "longDescription": "Guide agents through LiveSignal's transcript search, evidence, and timestamp navigation workflow.",
+    "developerName": "LiveSignal",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Use LiveSignal to find evidence in this livestream."
+  }
+}

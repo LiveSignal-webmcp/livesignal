@@ -36,6 +36,10 @@ On YouTube, LiveSignal only indexes timestamped transcript text that the platfor
 - `get_recent_events`
 - `search_stream`
 - `jump_to_event`
+
+## Agent skill/plugin
+
+`plugins/livesignal/` contains an installable Codex plugin with the LiveSignal skill. It guides an agent through discovery, transcript evidence, timestamp navigation, and tab-local watch rules without making unsupported background-monitoring claims. The plugin complements the browser extension; it does not replace it.
 - `create_watch_rule`
 - `search_livestreams`
 - `open_livestream_search`
