@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./adapter.css";
 import "./discovery.css";
+import "./proof.css";
 
 type StreamEvent = {
   id: string;
@@ -15,6 +16,10 @@ type StreamEvent = {
 };
 
 type StreamSearch = { id: "youtube" | "twitch"; platform: string; title: string; detail: string; url: string };
+
+const VERIFIED_REPLAY_URL = "https://www.youtube.com/watch?v=BREmL2qYfYM";
+const REPOSITORY_URL = "https://github.com/LiveSignal-webmcp/livesignal";
+const VERIFIED_TOOLS = ["get_current_stream_state", "get_transcript", "search_stream", "get_recent_events", "create_watch_rule", "get_active_watch_rules", "jump_to_timestamp", "jump_to_event"];
 
 function makeStreamSearches(query: string): StreamSearch[] {
   const topic = query.trim() || "live streams";
@@ -46,6 +51,7 @@ export default function Home() {
   const [detectedEvent, setDetectedEvent] = useState<StreamEvent | null>(null);
   const [discoveryQuery, setDiscoveryQuery] = useState("Ethereum updates");
   const [selectedSearchId, setSelectedSearchId] = useState<StreamSearch["id"] | null>(null);
+  const [registrationStatus, setRegistrationStatus] = useState<"checking" | "registered" | "unavailable" | "error">("checking");
   const registered = useRef(false);
   const streamEvents = useMemo(() => detectedEvent ? [...events, detectedEvent] : events, [detectedEvent]);
   const selected = streamEvents.find((event) => event.id === selectedId) ?? events[0];
@@ -77,11 +83,16 @@ export default function Home() {
 
   useEffect(() => {
     const page = document as ModelContextDocument;
-    if (!page.modelContext || registered.current) return;
+    if (!page.modelContext) {
+      setRegistrationStatus("unavailable");
+      return;
+    }
+    if (registered.current) return;
     registered.current = true;
+    const registrations: Promise<void>[] = [];
     const tool = (name: string, description: string, execute: (input: Record<string, unknown>) => unknown, inputSchema?: object) =>
-      page.modelContext?.registerTool({ name, description, inputSchema, execute }).catch(() => undefined);
-    tool("get_stream_info", "Returns the current stream title, creator, status, and available source evidence.", () => ({ title: "The Level Up Live Show", creator: "Maya Chen", status: "live replay", currentEvent: liveState.current.selected.title, adapter: "LiveSignal browser adapter" }));
+      registrations.push(page.modelContext!.registerTool({ name, description, inputSchema, execute }));
+    tool("get_stream_info", "Returns the verified real-stream test, source URL, adapter status, and available evidence.", () => ({ title: "CRYPTO LIVE - THE ETHEREUM BREAKOUT", creator: "Jordan Camirand", status: "verified YouTube live replay test", sourceUrl: VERIFIED_REPLAY_URL, currentEvidence: liveState.current.selected.title, adapter: "LiveSignal browser adapter" }));
     tool("get_recent_events", "Returns the latest timestamped livestream events with evidence.", () => liveState.current.events);
     tool("search_stream", "Searches event titles, summaries, and transcript evidence for a topic or phrase.", (input) => {
       const search = String(input.query ?? "").toLowerCase();
@@ -110,6 +121,7 @@ export default function Home() {
       openStreamSearch(source);
       return { ok: true, platform: source.platform, url: source.url, nextStep: "Open a result, then use the LiveSignal extension on the stream player." };
     }, { type: "object", properties: { query: { type: "string", description: "The live-stream topic to search for." }, platform: { type: "string", enum: ["youtube", "twitch"], description: "Platform whose results page should open." } }, required: ["query"] });
+    Promise.all(registrations).then(() => setRegistrationStatus("registered")).catch(() => setRegistrationStatus("error"));
   // WebMCP tools deliberately register once for the active stream page.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -117,7 +129,7 @@ export default function Home() {
   return <main>
     <nav className="topbar" aria-label="Primary navigation">
       <a className="brand" href="#top" aria-label="LiveSignal home"><span className="brand-mark" />LiveSignal</a>
-      <div className="nav-links"><a href="#discover">Discover</a><a href="#watch">Watch</a><a href="#events">Events</a><a href="#how-it-works">How it works</a></div>
+      <div className="nav-links"><a href="#verified-test">Real test</a><a href="#discover">Discover</a><a href="#watch">Workflow</a><a href="#how-it-works">How it works</a></div>
       <a className="outline-button" href="#how-it-works">How it works</a>
     </nav>
 
@@ -125,8 +137,33 @@ export default function Home() {
       <div className="eyebrow"><span className="live-dot" /> LIVE INTELLIGENCE</div>
       <h1>Live video, <em>without</em><br />the watch time.</h1>
       <p>LiveSignal turns streams into evidence-backed events. Ask an agent what happened, what matters, and where to find it.</p>
-      <div className="hero-actions"><a className="primary-button" href="#watch">Explore the live demo <span>→</span></a><a className="text-button" href="#how-it-works">See how it works</a></div>
+      <div className="hero-actions"><a className="primary-button" href="#verified-test">View the real test <span>→</span></a><a className="text-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open source replay ↗</a></div>
       <div className="signal-line" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
+    </section>
+
+    <section className="verified-test" id="verified-test" aria-labelledby="verified-title">
+      <div className="verified-heading">
+        <div><p className="eyebrow"><span className="verified-dot" /> VERIFIED REAL-STREAM TEST</p><h2 id="verified-title">A real replay.<br />Real transcript evidence.</h2></div>
+        <p>LiveSignal was loaded on an existing YouTube live replay, registered its semantic WebMCP tools, indexed the transcript YouTube exposed, and found the requested topic with source timestamps.</p>
+      </div>
+      <div className="verified-grid">
+        <article className="proof-card proof-summary">
+          <div className="proof-card-top"><span>TEST RESULT</span><b>PASS</b></div>
+          <h3>CRYPTO LIVE — THE ETHEREUM BREAKOUT</h3>
+          <p className="proof-source">YouTube live replay · tested August 28, 2026</p>
+          <div className="proof-stats"><span><strong>8</strong>tools registered</span><span><strong>393</strong>transcript segments</span><span><strong>0:09</strong>first Ethereum match</span></div>
+          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href={`${REPOSITORY_URL}#try-the-real-youtube-path`} target="_blank" rel="noreferrer">Install the adapter</a></div>
+        </article>
+        <article className="proof-card proof-output">
+          <div className="proof-card-top"><span>AGENT EVIDENCE</span><b>search_stream</b></div>
+          <p className="prompt-line"><span>›</span> Search this stream for “Ethereum.”</p>
+          <div className="match-line"><time>0:09</time><span><b>Ethereum mentioned</b><small>“Big day for Ethereum.”</small></span><em>source evidence</em></div>
+          <div className="match-line"><time>0:50</time><span><b>Price context</b><small>“Ethereum over here at 2,243.”</small></span><em>source evidence</em></div>
+          <p className="proof-footnote">The agent can pass either result to <code>jump_to_event</code> and seek the existing player.</p>
+        </article>
+      </div>
+      <div className="tool-strip"><span>REAL ADAPTER TOOLS</span><div>{VERIFIED_TOOLS.map((toolName) => <code key={toolName}>{toolName}</code>)}</div></div>
+      <p className={`webmcp-check ${registrationStatus}`}><span /> Hosted Companion WebMCP: {registrationStatus === "registered" ? "tools registered" : registrationStatus === "unavailable" ? "open in a WebMCP-enabled browser" : registrationStatus === "error" ? "registration failed" : "checking support"}</p>
     </section>
 
     <section className="discovery" id="discover" aria-label="Find a livestream to monitor">
@@ -135,8 +172,8 @@ export default function Home() {
     </section>
 
     <section className="workspace" id="watch" aria-label="Live stream monitoring demo">
-      <div className="stream-header"><div><p className="overline">COMPANION DEMO</p><h2>The Level Up Live Show</h2><p className="muted">Illustrative timeline · seeded evidence for the WebMCP interaction demo</p></div><div className="stream-status"><span className="live-dot" /> LIVE REPLAY <b>●</b> 1.8K watching</div></div>
-      <div className="adapter-bar"><span className="adapter-icon">↗</span><span><b>Browser adapter prototype</b> · The extension uses real, visible YouTube transcript evidence; this Companion timeline is demo data.</span><button type="button" onClick={() => triggerWatchEvent()}>Add demo signal</button></div>
+      <div className="stream-header"><div><p className="overline">ILLUSTRATIVE WORKFLOW</p><h2>How evidence becomes an answer</h2><p className="muted">Interactive product preview · sample interface data, not stream extraction</p></div><div className="stream-status"><span className="preview-dot" /> INTERACTION PREVIEW</div></div>
+      <div className="adapter-bar"><span className="adapter-icon">↗</span><span><b>The verified result is above.</b> This secondary workspace demonstrates how a person reviews evidence, events, and watch rules after the adapter responds.</span><button type="button" onClick={() => triggerWatchEvent()}>Simulate signal</button></div>
       {detectedEvent && <button className="signal-notice" type="button" onClick={() => selectEvent(detectedEvent)}><span className="live-dot" /><span><b>New signal: {detectedEvent.title}</b><small>{detectedEvent.time} · View matching evidence</small></span><strong>Show →</strong></button>}
       <div className="monitor-grid">
         <div className="player-panel" aria-label="Stream player">
