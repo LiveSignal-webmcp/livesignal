@@ -1,0 +1,20 @@
+{
+  "name": "livesignal-webmcp",
+  "interface": {
+    "displayName": "LiveSignal WebMCP"
+  },
+  "plugins": [
+    {
+      "name": "livesignal",
+      "source": {
+        "source": "local",
+        "path": "./plugins/livesignal"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

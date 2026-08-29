@@ -1,0 +1,12 @@
+.pairing{max-width:1310px;margin:0 auto 110px;padding:58px 60px;border:1px solid #242422;background:#171719;color:#fff;display:grid;grid-template-columns:1fr 1.08fr;gap:90px;box-shadow:8px 8px 0 var(--purple)}
+.pairing h2{font-size:clamp(42px,5vw,70px);line-height:.95;letter-spacing:-3.5px;margin:16px 0 21px}
+.pairing-copy>p:not(.eyebrow){max-width:500px;color:#bdbdb7;font-size:16px;line-height:1.55}
+.pairing .eyebrow{color:var(--lime)}
+.pairing-badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:26px}
+.pairing-badges span{border:1px solid #61615e;border-radius:999px;padding:7px 10px;color:#ddd;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.pairing-flow{list-style:none;padding:0;margin:0;border-top:1px solid #44443f}
+.pairing-flow li{display:grid;grid-template-columns:42px 1fr;gap:14px;padding:22px 0;border-bottom:1px solid #44443f;align-items:start}
+.pairing-flow b{width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:var(--lime);color:#111;font-size:12px}
+.pairing-flow strong{display:block;font-size:16px;margin-bottom:5px}
+.pairing-flow small{display:block;color:#aaa;font-size:13px;line-height:1.4}
+@media(max-width:800px){.pairing{margin:0 15px 75px;padding:38px 24px;grid-template-columns:1fr;gap:36px;box-shadow:4px 4px 0 var(--purple)}.pairing h2{letter-spacing:-2.5px}}

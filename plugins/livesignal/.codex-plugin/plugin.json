@@ -1,18 +1,28 @@
 {
   "name": "livesignal",
-  "version": "0.1.0",
-  "description": "Evidence-first livestream research workflow for WebMCP agents.",
+  "version": "0.2.0",
+  "description": "Pair browser control with LiveSignal for evidence-first livestream research.",
   "author": {
     "name": "LiveSignal"
   },
+  "homepage": "https://livesignal-chi.vercel.app",
+  "repository": "https://github.com/LiveSignal-webmcp/livesignal",
+  "license": "MIT",
+  "keywords": ["webmcp", "livestream", "browser-agent", "transcription"],
   "skills": "./skills/",
   "interface": {
     "displayName": "LiveSignal",
-    "shortDescription": "Find evidence in livestreams.",
-    "longDescription": "Guide agents through LiveSignal's transcript search, evidence, and timestamp navigation workflow.",
+    "shortDescription": "Research livestreams with timestamped evidence.",
+    "longDescription": "Pair browser navigation with LiveSignal's WebMCP tools, realtime transcript evidence, search, watch rules, and timestamp navigation.",
     "developerName": "LiveSignal",
     "category": "Productivity",
     "capabilities": [],
-    "defaultPrompt": "Use LiveSignal to find evidence in this livestream."
+    "websiteURL": "https://livesignal-chi.vercel.app",
+    "brandColor": "#D8FF45",
+    "defaultPrompt": [
+      "Find a relevant livestream and summarize it with evidence.",
+      "What are they discussing in this live stream right now?",
+      "Watch this stream for a specific topic and show me the moment."
+    ]
   }
 }

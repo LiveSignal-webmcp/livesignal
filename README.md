@@ -4,7 +4,7 @@
 
 LiveSignal is a WebMCP prototype for agents that need to gather information from livestreams when a person does not have time to watch. It helps an agent find streams on existing platforms, search evidence inside a supported stream, create focused watch rules, and jump to the exact moment that supports an answer.
 
-It is deliberately an adapter, not a streaming platform. The Companion web app demonstrates the interaction design; the browser extension exposes semantic tools on YouTube and Twitch pages.
+It is deliberately an adapter, not a streaming platform. The Companion web app demonstrates the interaction design; the browser extension exposes semantic tools on YouTube and Twitch pages; the Codex plugin teaches an agent how to combine stream discovery, browser navigation, and evidence retrieval.
 
 ## The problem
 
@@ -22,11 +22,15 @@ The Companion timeline is explicitly seeded demo data. It is used to make the pr
 
 ### Browser adapter
 
-- **YouTube:** normalized player state, visible transcript retrieval, transcript search, event generation from transcript watch rules, and timestamp navigation.
-- **Twitch:** normalized player state and timestamp navigation where the player provides a playback window.
-- A small in-page status badge so a person can see when LiveSignal is active.
+- **YouTube:** normalized player state, native transcript retrieval, realtime tab-audio transcription, transcript search, watch rules, and timestamp navigation.
+- **Twitch:** normalized player state, realtime tab-audio transcription, transcript search, and timestamp navigation where the player provides a playback window.
+- One explicit tab-audio approval, followed by autonomous agent navigation in the same tab.
+- A paired Codex browser-control bridge using the same handlers as WebMCP.
+- Stream-scoped evidence isolation so transcript lines do not leak across navigation.
 
-On YouTube, LiveSignal only indexes timestamped transcript text that the platform renders in its own transcript panel. It does not claim to transcribe audio, understand visual scenes, or continue monitoring after the tab is refreshed or closed.
+LiveSignal prefers native YouTube transcript text. When none is available, it uses ElevenLabs Scribe v2 Realtime after the user approves tab audio once. It does not claim visual scene understanding or persistent background monitoring after capture ends.
+
+The latest unpacked demo bundle is available from the hosted site as `livesignal-extension-v0.4.0.zip`.
 
 ## WebMCP tool surface
 
@@ -39,7 +43,16 @@ On YouTube, LiveSignal only indexes timestamped transcript text that the platfor
 
 ## Agent skill/plugin
 
-`plugins/livesignal/` contains an installable Codex plugin with the LiveSignal skill. It guides an agent through discovery, transcript evidence, timestamp navigation, and tab-local watch rules without making unsupported background-monitoring claims. The plugin complements the browser extension; it does not replace it.
+`plugins/livesignal/` contains an installable Codex plugin with the LiveSignal skill. It pairs browser control with the extension: the browser agent discovers and navigates streams; LiveSignal supplies transcript evidence, search, events, and player actions. WebMCP remains the native path, with `window.LiveSignalAgent` as a compatibility bridge for browser runtimes that cannot surface page-registered tools yet.
+
+Install the public plugin marketplace and plugin:
+
+```bash
+codex plugin marketplace add LiveSignal-webmcp/livesignal --ref main
+codex plugin add livesignal@livesignal-webmcp
+```
+
+Start a new Codex task after installation so the LiveSignal skill is loaded.
 - `create_watch_rule`
 - `search_livestreams`
 - `open_livestream_search`
@@ -60,9 +73,9 @@ On YouTube, LiveSignal only indexes timestamped transcript text that the platfor
 1. Start the web app with `npm run dev`.
 2. In a compatible Chrome build, enable WebMCP.
 3. Open `chrome://extensions`, enable Developer mode, then load `extension/` as an unpacked extension.
-4. Open a YouTube video or live replay with a transcript, then open YouTube's transcript panel.
-5. Ask your agent: “Search this stream for Ethereum and show me the evidence.”
-6. Ask: “Monitor this transcript for a release date.” Then use `get_recent_events` and `jump_to_event` when a matching line appears.
+4. Open a YouTube or Twitch livestream. Open the LiveSignal popup and choose **Enable for this tab** once when native evidence is unavailable.
+5. Ask your agent: “Find a current livestream about Ethereum and tell me what it is discussing, with evidence.”
+6. Ask: “Monitor this stream for a release date.” Then use `get_recent_events` and `jump_to_event` when a matching line appears.
 
 ## Local development
 
@@ -79,7 +92,8 @@ npm run build
 
 ## Design choices and limits
 
-- **One reliable proof path first:** transcript-backed YouTube search and seeks are more demonstrable than claiming universal multimodal livestream understanding.
+- **One consent boundary:** Chrome requires a user gesture for tab audio capture; after that, the paired agent controls search and navigation in the approved tab.
+- **One evidence contract:** WebMCP and the browser-control bridge call the same eight handlers.
 - **No invented data:** a missing transcript is reported as missing, with guidance to open YouTube's transcript panel.
 - **No false background-monitoring claim:** watch rules are intentionally in-page and scoped to the current browser tab.
 - **Platform compatibility:** the extension is a prototype and is not affiliated with YouTube or Twitch. Platform DOM changes may require adapter updates.

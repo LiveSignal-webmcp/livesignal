@@ -8,6 +8,7 @@
   const events = [];
   const seenMatches = new Set();
   const liveSegmentMap = new Map();
+  let activeStreamKey = null;
   let liveTranscription = {
     status: "idle",
     provider: "ElevenLabs Scribe v2 Realtime",
@@ -17,6 +18,18 @@
 
   const getVideo = () => document.querySelector("video");
   const isYouTube = () => location.hostname.includes("youtube.com");
+  const streamKeyFor = (urlValue = location.href) => {
+    try {
+      const url = new URL(urlValue, location.href);
+      if (url.hostname.includes("youtube.com")) {
+        return `youtube:${url.searchParams.get("v") || url.pathname}`;
+      }
+      return `twitch:${url.pathname.split("/").filter(Boolean).slice(0, 2).join("/")}`;
+    } catch {
+      return String(urlValue);
+    }
+  };
+  activeStreamKey = streamKeyFor();
   const round = (value) => Math.round(value * 10) / 10;
   const formatTimestamp = (totalSeconds) => {
     const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
@@ -85,6 +98,11 @@
       currentTime: video ? round(video.currentTime) : null,
       duration: video && Number.isFinite(video.duration) ? round(video.duration) : null,
       paused: video?.paused ?? null,
+      agentBridge: {
+        status: "ready",
+        version: "1.0",
+        transport: document.modelContext ? "webmcp+page_bridge" : "page_bridge"
+      },
       liveTranscription: {
         status: liveTranscription.status,
         provider: liveTranscription.provider,
@@ -96,7 +114,42 @@
     };
   };
 
-  const publish = () => window.postMessage({ source: "livesignal", type: "state", payload: getState() }, location.origin);
+  const resetEvidenceForNavigation = () => {
+    const nextStreamKey = streamKeyFor();
+    if (nextStreamKey === activeStreamKey) return false;
+    activeStreamKey = nextStreamKey;
+    liveSegmentMap.clear();
+    events.splice(0, events.length);
+    seenMatches.clear();
+    return true;
+  };
+
+  const updateAgentSnapshot = (state) => {
+    let snapshot = document.getElementById("livesignal-agent-state");
+    if (!snapshot) {
+      snapshot = document.createElement("script");
+      snapshot.id = "livesignal-agent-state";
+      snapshot.type = "application/json";
+      document.documentElement.append(snapshot);
+    }
+    snapshot.textContent = JSON.stringify({
+      version: "1.0",
+      state,
+      recentTranscript: transcriptSegments().slice(-80),
+      events: events.slice(0, 80),
+      activeWatchRules: Array.from(watchRules)
+    });
+    document.documentElement.dataset.livesignalAgent = "ready";
+    document.documentElement.dataset.livesignalSegmentCount = String(state.transcript.segmentCount);
+    document.documentElement.dataset.livesignalStreamKey = activeStreamKey;
+  };
+
+  const publish = () => {
+    resetEvidenceForNavigation();
+    const state = getState();
+    updateAgentSnapshot(state);
+    window.postMessage({ source: "livesignal", type: "state", payload: state }, location.origin);
+  };
   const seek = (seconds) => {
     const video = getVideo();
     if (!video) return { ok: false, error: "No HTML video element is available on this page." };
@@ -168,6 +221,116 @@
     return { ...seek(segment.seconds), event: { id: `transcript-event-${segment.id}`, timestamp: segment.timestamp, evidence: segment.text } };
   };
 
+  const getTranscript = ({ limit = 80 } = {}) => {
+    const safeLimit = Math.max(1, Math.min(Number(limit) || 80, MAX_TRANSCRIPT_SEGMENTS));
+    const segments = transcriptSegments();
+    return { ...transcriptAvailability(), segments: segments.slice(-safeLimit) };
+  };
+
+  const getRecentEvents = () => {
+    createEventsFromTranscript();
+    return { events, activeWatchRules: Array.from(watchRules), ...transcriptAvailability() };
+  };
+
+  const createWatchRule = ({ topic } = {}) => {
+    const normalized = String(topic || "").trim();
+    if (!normalized) return { ok: false, error: "A topic is required." };
+    watchRules.add(normalized);
+    createEventsFromTranscript();
+    publish();
+    return { ok: true, topic: normalized, status: "active", scope: "this browser page" };
+  };
+
+  const toolDefinitions = [
+    {
+      name: "get_current_stream_state",
+      description: "Returns normalized player state for the active YouTube or Twitch page, including native transcript and realtime listening status.",
+      execute: () => getState()
+    },
+    {
+      name: "get_transcript",
+      description: "Returns timestamped transcript evidence from a visible YouTube transcript or LiveSignal's realtime ElevenLabs transcription. If neither is available, explains how to enable listening.",
+      inputSchema: {
+        type: "object",
+        properties: { limit: { type: "number", description: "Maximum number of most recent transcript segments to return (default 80, maximum 300)." } }
+      },
+      execute: getTranscript
+    },
+    {
+      name: "search_stream",
+      description: "Searches native or realtime livestream transcript evidence for a topic or phrase and returns timestamped matches that can be opened in the player.",
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string", description: "Topic, person, or phrase to find in the active stream transcript." } },
+        required: ["query"]
+      },
+      execute: ({ query } = {}) => searchTranscript(query)
+    },
+    {
+      name: "get_recent_events",
+      description: "Returns timestamped LiveSignal events created when active watch rules match transcript evidence.",
+      execute: getRecentEvents
+    },
+    {
+      name: "create_watch_rule",
+      description: "Creates an in-page rule that monitors native and realtime transcript evidence for a topic. The rule lasts until this page is refreshed or closed.",
+      inputSchema: {
+        type: "object",
+        properties: { topic: { type: "string", description: "Case-insensitive word or phrase to monitor in transcript evidence." } },
+        required: ["topic"]
+      },
+      execute: createWatchRule
+    },
+    {
+      name: "get_active_watch_rules",
+      description: "Returns active LiveSignal transcript watch rules for this browser page.",
+      execute: () => ({ rules: Array.from(watchRules), scope: "this browser page" })
+    },
+    {
+      name: "jump_to_timestamp",
+      description: "Seeks the visible player to a timestamp when the stream exposes a DVR or VOD window.",
+      inputSchema: {
+        type: "object",
+        properties: { seconds: { type: "number", description: "Target position in seconds from the start of the available playback window." } },
+        required: ["seconds"]
+      },
+      execute: ({ seconds } = {}) => seek(seconds)
+    },
+    {
+      name: "jump_to_event",
+      description: "Seeks the visible player to a timestamped transcript match or LiveSignal event returned by search_stream or get_recent_events.",
+      inputSchema: {
+        type: "object",
+        properties: { eventId: { type: "string", description: "Event or transcript-match id returned by LiveSignal." } },
+        required: ["eventId"]
+      },
+      execute: ({ eventId } = {}) => jumpToEvent(String(eventId || ""))
+    }
+  ];
+
+  const toolHandlers = new Map(toolDefinitions.map((tool) => [tool.name, tool.execute]));
+  const callAgentTool = async (name, input = {}) => {
+    resetEvidenceForNavigation();
+    const handler = toolHandlers.get(String(name || ""));
+    if (!handler) {
+      return { ok: false, error: `Unknown LiveSignal tool: ${String(name || "")}`, availableTools: Array.from(toolHandlers.keys()) };
+    }
+    return handler(input || {});
+  };
+
+  Object.defineProperty(window, "LiveSignalAgent", {
+    configurable: false,
+    enumerable: false,
+    writable: false,
+    value: Object.freeze({
+      version: "1.0",
+      listTools: () => Array.from(toolHandlers.keys()),
+      getSnapshot: () => JSON.parse(document.getElementById("livesignal-agent-state")?.textContent || "{}"),
+      call: callAgentTool
+    })
+  });
+  document.documentElement.dataset.livesignalAgent = "ready";
+
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.data?.source !== "livesignal") return;
     if (event.data?.type === "request-state") {
@@ -177,6 +340,7 @@
     if (event.data?.type !== "live-transcription-state") return;
 
     const payload = event.data.payload || {};
+    resetEvidenceForNavigation();
     liveTranscription = {
       status: payload.status || "idle",
       provider: payload.provider || "ElevenLabs Scribe v2 Realtime",
@@ -186,6 +350,7 @@
     document.documentElement.dataset.livesignalTranscription = liveTranscription.status;
 
     (payload.segments || []).forEach((segment) => {
+      if (segment.streamUrl && streamKeyFor(segment.streamUrl) !== activeStreamKey) return;
       if (!segment?.id || !segment.text || liveSegmentMap.has(segment.id)) return;
       const video = getVideo();
       const seconds = video && Number.isFinite(video.currentTime) ? round(video.currentTime) : null;
@@ -205,6 +370,7 @@
   });
 
   const scanTimer = window.setInterval(() => {
+    resetEvidenceForNavigation();
     createEventsFromTranscript();
     publish();
   }, 2500);
@@ -225,83 +391,7 @@
       .catch((error) => ({ name: tool.name, ok: false, error: String(error?.message || error) }));
     registrations.push(registration);
   };
-  register({
-    name: "get_current_stream_state",
-    description: "Returns normalized player state for the active YouTube or Twitch page, including native transcript and realtime listening status.",
-    execute: () => getState()
-  });
-  register({
-    name: "get_transcript",
-    description: "Returns timestamped transcript evidence from a visible YouTube transcript or LiveSignal's realtime ElevenLabs transcription. If neither is available, explains how to enable listening.",
-    inputSchema: {
-      type: "object",
-      properties: { limit: { type: "number", description: "Maximum number of most recent transcript segments to return (default 80, maximum 300)." } }
-    },
-    execute: ({ limit = 80 } = {}) => {
-      const safeLimit = Math.max(1, Math.min(Number(limit) || 80, MAX_TRANSCRIPT_SEGMENTS));
-      const segments = transcriptSegments();
-      return { ...transcriptAvailability(), segments: segments.slice(-safeLimit) };
-    }
-  });
-  register({
-    name: "search_stream",
-    description: "Searches native or realtime livestream transcript evidence for a topic or phrase and returns timestamped matches that can be opened in the player.",
-    inputSchema: {
-      type: "object",
-      properties: { query: { type: "string", description: "Topic, person, or phrase to find in the active stream transcript." } },
-      required: ["query"]
-    },
-    execute: ({ query }) => searchTranscript(query)
-  });
-  register({
-    name: "get_recent_events",
-    description: "Returns timestamped LiveSignal events created when active watch rules match transcript evidence.",
-    execute: () => {
-      createEventsFromTranscript();
-      return { events, activeWatchRules: Array.from(watchRules), ...transcriptAvailability() };
-    }
-  });
-  register({
-    name: "create_watch_rule",
-    description: "Creates an in-page rule that monitors native and realtime transcript evidence for a topic. The rule lasts until this tab is refreshed or closed.",
-    inputSchema: {
-      type: "object",
-      properties: { topic: { type: "string", description: "Case-insensitive word or phrase to monitor in transcript evidence." } },
-      required: ["topic"]
-    },
-    execute: ({ topic }) => {
-      const normalized = String(topic || "").trim();
-      if (!normalized) return { ok: false, error: "A topic is required." };
-      watchRules.add(normalized);
-      createEventsFromTranscript();
-      return { ok: true, topic: normalized, status: "active", scope: "this browser tab until refresh" };
-    }
-  });
-  register({
-    name: "get_active_watch_rules",
-    description: "Returns active LiveSignal transcript watch rules for this browser tab.",
-    execute: () => ({ rules: Array.from(watchRules), scope: "this browser tab until refresh" })
-  });
-  register({
-    name: "jump_to_timestamp",
-    description: "Seeks the visible player to a timestamp when the stream exposes a DVR or VOD window.",
-    inputSchema: {
-      type: "object",
-      properties: { seconds: { type: "number", description: "Target position in seconds from the start of the available playback window." } },
-      required: ["seconds"]
-    },
-    execute: ({ seconds }) => seek(seconds)
-  });
-  register({
-    name: "jump_to_event",
-    description: "Seeks the visible player to a timestamped transcript match or LiveSignal event returned by search_stream or get_recent_events.",
-    inputSchema: {
-      type: "object",
-      properties: { eventId: { type: "string", description: "Event or transcript-match id returned by LiveSignal." } },
-      required: ["eventId"]
-    },
-    execute: ({ eventId }) => jumpToEvent(String(eventId || ""))
-  });
+  toolDefinitions.forEach(register);
   Promise.all(registrations).then((results) => {
     const failed = results.filter((result) => !result.ok);
     document.documentElement.dataset.livesignalWebmcp = failed.length ? "error" : "registered";

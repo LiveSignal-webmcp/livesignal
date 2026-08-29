@@ -14,21 +14,6 @@
       badge.title = "The LiveSignal browser badge loaded, but its page adapter did not. Reload the extension and this page.";
       return;
     }
-    if (webmcp === "registering") {
-      badge.textContent = "● LiveSignal · registering tools";
-      badge.title = "The LiveSignal adapter found WebMCP and is registering its semantic livestream tools.";
-      return;
-    }
-    if (webmcp === "error") {
-      badge.textContent = "● LiveSignal · tool registration failed";
-      badge.title = "The page exposes WebMCP, but one or more LiveSignal tools could not register. Reload this page and inspect the extension source for details.";
-      return;
-    }
-    if (webmcp !== "registered") {
-      badge.textContent = "● LiveSignal · WebMCP unavailable";
-      badge.title = "The page adapter is active, but this Chrome session does not expose document.modelContext. Enable WebMCP, then reload this page.";
-      return;
-    }
     if (transcriptionState.status === "connecting") {
       badge.textContent = "● LiveSignal · connecting audio";
       badge.title = "LiveSignal is connecting this tab to ElevenLabs Scribe realtime transcription.";
@@ -38,12 +23,27 @@
       badge.textContent = transcriptionState.partial
         ? `● Listening · ${transcriptionState.partial.slice(0, 42)}`
         : `● LiveSignal listening · ${transcriptionState.segments.length} segments`;
-      badge.title = "Realtime transcript evidence is being captured. Click the LiveSignal toolbar icon to stop.";
+      badge.title = "Realtime evidence is available to WebMCP and the Codex browser-control bridge.";
       return;
     }
     if (transcriptionState.status === "error") {
       badge.textContent = "● LiveSignal · listening error";
       badge.title = transcriptionState.error || "Realtime transcription failed. Click the LiveSignal toolbar icon to retry.";
+      return;
+    }
+    if (webmcp === "registering") {
+      badge.textContent = "● LiveSignal · registering tools";
+      badge.title = "The LiveSignal adapter found WebMCP and is registering its semantic livestream tools.";
+      return;
+    }
+    if (webmcp === "error") {
+      badge.textContent = "● LiveSignal · browser bridge ready";
+      badge.title = "The Codex browser-control bridge is ready, but one or more WebMCP tools could not register.";
+      return;
+    }
+    if (webmcp !== "registered") {
+      badge.textContent = "● LiveSignal · agent bridge ready";
+      badge.title = "Codex browser control can use LiveSignal now. Enable WebMCP for native semantic tool discovery.";
       return;
     }
     badge.textContent = "● LiveSignal active";

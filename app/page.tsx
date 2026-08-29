@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./adapter.css";
 import "./discovery.css";
+import "./pairing.css";
 import "./proof.css";
 
 type StreamEvent = {
@@ -56,7 +57,9 @@ export default function Home() {
   const streamEvents = useMemo(() => detectedEvent ? [...events, detectedEvent] : events, [detectedEvent]);
   const selected = streamEvents.find((event) => event.id === selectedId) ?? events[0];
   const liveState = useRef({ events: streamEvents, selected });
-  liveState.current = { events: streamEvents, selected };
+  useEffect(() => {
+    liveState.current = { events: streamEvents, selected };
+  }, [streamEvents, selected]);
   const matchingEvents = useMemo(() => {
     const term = query.trim().toLowerCase();
     return term ? streamEvents.filter((event) => `${event.title} ${event.detail} ${event.quote}`.toLowerCase().includes(term)) : streamEvents;
@@ -84,7 +87,7 @@ export default function Home() {
   useEffect(() => {
     const page = document as ModelContextDocument;
     if (!page.modelContext) {
-      setRegistrationStatus("unavailable");
+      window.setTimeout(() => setRegistrationStatus("unavailable"), 0);
       return;
     }
     if (registered.current) return;
@@ -129,7 +132,7 @@ export default function Home() {
   return <main>
     <nav className="topbar" aria-label="Primary navigation">
       <a className="brand" href="#top" aria-label="LiveSignal home"><span className="brand-mark" />LiveSignal</a>
-      <div className="nav-links"><a href="#verified-test">Real test</a><a href="#discover">Discover</a><a href="#watch">Workflow</a><a href="#how-it-works">How it works</a></div>
+      <div className="nav-links"><a href="#verified-test">Real test</a><a href="#paired-agent">Paired agent</a><a href="#discover">Discover</a><a href="#watch">Workflow</a></div>
       <a className="outline-button" href="#how-it-works">How it works</a>
     </nav>
 
@@ -152,7 +155,7 @@ export default function Home() {
           <h3>CRYPTO LIVE — THE ETHEREUM BREAKOUT</h3>
           <p className="proof-source">YouTube live replay · tested August 28, 2026</p>
           <div className="proof-stats"><span><strong>8</strong>tools registered</span><span><strong>393</strong>transcript segments</span><span><strong>0:09</strong>first Ethereum match</span></div>
-          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href={`${REPOSITORY_URL}#try-the-real-youtube-path`} target="_blank" rel="noreferrer">Install the adapter</a></div>
+          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href="/livesignal-extension-v0.4.0.zip" download>Download extension</a><a className="text-button" href={`${REPOSITORY_URL}/tree/main/plugins/livesignal`} target="_blank" rel="noreferrer">Agent plugin</a></div>
         </article>
         <article className="proof-card proof-output">
           <div className="proof-card-top"><span>AGENT EVIDENCE</span><b>search_stream</b></div>
@@ -164,6 +167,20 @@ export default function Home() {
       </div>
       <div className="tool-strip"><span>REAL ADAPTER TOOLS</span><div>{VERIFIED_TOOLS.map((toolName) => <code key={toolName}>{toolName}</code>)}</div></div>
       <p className={`webmcp-check ${registrationStatus}`}><span /> Hosted Companion WebMCP: {registrationStatus === "registered" ? "tools registered" : registrationStatus === "unavailable" ? "open in a WebMCP-enabled browser" : registrationStatus === "error" ? "registration failed" : "checking support"}</p>
+    </section>
+
+    <section className="pairing" id="paired-agent" aria-labelledby="pairing-title">
+      <div className="pairing-copy">
+        <p className="eyebrow">PAIRED AGENT MODE</p>
+        <h2 id="pairing-title">Approve once.<br />Then just ask.</h2>
+        <p>Codex handles search and navigation. LiveSignal stays attached to the approved tab and turns each selected stream into timestamped evidence.</p>
+        <div className="pairing-badges"><span>WebMCP native</span><span>Browser-control bridge</span><span>Realtime STT</span></div>
+      </div>
+      <ol className="pairing-flow">
+        <li><b>1</b><span><strong>Human consent</strong><small>Enable LiveSignal once for the dedicated research tab.</small></span></li>
+        <li><b>2</b><span><strong>Agent navigation</strong><small>Search live results and move between YouTube or Twitch streams.</small></span></li>
+        <li><b>3</b><span><strong>Evidence, not guesses</strong><small>Read, search, and cite transcript lines with source timestamps.</small></span></li>
+      </ol>
     </section>
 
     <section className="discovery" id="discover" aria-label="Find a livestream to monitor">
@@ -188,7 +205,7 @@ export default function Home() {
       </div>
     </section>
 
-    <section className="how" id="how-it-works"><div><p className="eyebrow">BUILT FOR AGENTS, PROVEN FOR HUMANS</p><h2>From a long stream<br />to a clear answer.</h2></div><div className="steps"><p><b>01</b><span>LiveSignal reads player state and transcript evidence that the platform exposes.</span></p><p><b>02</b><span>It turns matching transcript lines into timestamped, evidence-backed signals.</span></p><p><b>03</b><span>WebMCP lets an agent search, explain, and show the exact moment.</span></p></div></section>
+    <section className="how" id="how-it-works"><div><p className="eyebrow">BUILT FOR AGENTS, PROVEN FOR HUMANS</p><h2>From a long stream<br />to a clear answer.</h2></div><div className="steps"><p><b>01</b><span>The browser agent finds and opens a relevant livestream in the approved tab.</span></p><p><b>02</b><span>LiveSignal reads native captions or transcribes tab audio into timestamped evidence.</span></p><p><b>03</b><span>WebMCP lets the agent search, explain, and show the exact source moment.</span></p></div></section>
     <footer><a className="brand" href="#top"><span className="brand-mark" />LiveSignal</a><p>Turn watch time into useful signal.</p><span>WebMCP experiment · 2026</span></footer>
   </main>;
 }

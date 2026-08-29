@@ -9,6 +9,7 @@ const tabStates = new Map();
 const initialState = () => ({
   status: "idle",
   provider: "ElevenLabs Scribe v2 Realtime",
+  streamUrl: null,
   partial: "",
   segments: [],
   error: null
@@ -58,6 +59,9 @@ const startTranscription = async (tab) => {
 
   const state = stateFor(tab.id);
   state.status = "connecting";
+  state.streamUrl = tab.url || state.streamUrl;
+  state.segments = [];
+  state.partial = "";
   state.error = null;
   await sendState(tab.id);
 
@@ -118,15 +122,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     state.error = message.error || null;
   }
   if (message.type === "TRANSCRIPT_PARTIAL") {
+    state.status = "listening";
     state.partial = message.text || "";
   }
   if (message.type === "TRANSCRIPT_COMMITTED" && message.segment?.text) {
+    state.status = "listening";
     state.partial = "";
-    state.segments.push(message.segment);
+    state.segments.push({ ...message.segment, streamUrl: state.streamUrl });
     state.segments = state.segments.slice(-MAX_SEGMENTS);
   }
   void sendState(message.tabId);
   return false;
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!changeInfo.url || !tabStates.has(tabId)) return;
+  const state = stateFor(tabId);
+  if (state.streamUrl === changeInfo.url) return;
+  state.streamUrl = changeInfo.url || tab.url || null;
+  state.partial = "";
+  state.segments = [];
+  void sendState(tabId);
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

@@ -26,6 +26,8 @@ test("server-renders the verified LiveSignal adapter proof with accurate framing
   assert.match(html, /8<\/strong>tools registered/);
   assert.match(html, /youtube\.com\/watch\?v=BREmL2qYfYM/);
   assert.match(html, /STREAM DISCOVERY/);
+  assert.match(html, /PAIRED AGENT MODE/);
+  assert.match(html, /Approve once/);
   assert.match(html, /ILLUSTRATIVE WORKFLOW/);
   assert.match(html, /sample interface data, not stream extraction/);
   assert.doesNotMatch(html, /Your site is taking shape|Building your site|codex-preview/i);
