@@ -31,7 +31,7 @@ The Companion timeline is explicitly seeded demo data. It is used to make the pr
 
 LiveSignal prefers native YouTube transcript text. When none is available, it uses ElevenLabs Scribe v2 Realtime after the user approves tab audio once. It does not claim visual scene understanding or persistent background monitoring after capture ends.
 
-The latest unpacked demo bundle is available from the hosted site as `livesignal-extension-v0.4.2.zip`.
+The latest unpacked demo bundle is available from the hosted site as `livesignal-extension-v0.4.3.zip`.
 
 ## WebMCP tool surface
 

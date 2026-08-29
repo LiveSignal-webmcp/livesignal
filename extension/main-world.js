@@ -256,7 +256,8 @@
         .map((node) => node.textContent?.trim()).filter(Boolean);
       const normalizedTitle = title.toLowerCase();
       const matchedTokens = topicTokens.filter((token) => normalizedTitle.includes(token));
-      const isLive = badges.some((badge) => badge.toUpperCase().includes("LIVE"));
+      const isLive = Boolean(card.querySelector("badge-shape.ytBadgeShapeLive")) ||
+        badges.some((badge) => /LIVE|直播|EN DIRECT|AO VIVO|CANLI|DIRETTA|ТРАНСЛЯЦИЯ/i.test(badge));
       const automatedSignals = /24\/7|signal|scalping|heatmap|order book|\bm1\b|\bm5\b|monitor|no delay/i.test(title);
       const commentarySignals = /analysis|news|update|discussion|market heading|live trading|breakout|prediction/i.test(title);
       const exactTopicMatch = Boolean(requestedQuery) && normalizedTitle.includes(requestedQuery.toLowerCase());

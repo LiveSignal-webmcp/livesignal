@@ -155,7 +155,7 @@ export default function Home() {
           <h3>CRYPTO LIVE — THE ETHEREUM BREAKOUT</h3>
           <p className="proof-source">YouTube live replay · tested August 28, 2026</p>
           <div className="proof-stats"><span><strong>9</strong>tools registered</span><span><strong>393</strong>transcript segments</span><span><strong>0:09</strong>first Ethereum match</span></div>
-          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href="/livesignal-extension-v0.4.2.zip" download>Download extension</a><a className="text-button" href={`${REPOSITORY_URL}/tree/main/plugins/livesignal`} target="_blank" rel="noreferrer">Agent plugin</a></div>
+          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href="/livesignal-extension-v0.4.3.zip" download>Download extension</a><a className="text-button" href={`${REPOSITORY_URL}/tree/main/plugins/livesignal`} target="_blank" rel="noreferrer">Agent plugin</a></div>
         </article>
         <article className="proof-card proof-output">
           <div className="proof-card-top"><span>AGENT EVIDENCE</span><b>search_stream</b></div>

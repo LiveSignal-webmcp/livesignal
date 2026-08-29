@@ -107,6 +107,7 @@ function searchCard({ title, url, channel, live = true, metadata = [] }) {
     querySelector(selector) {
       if (selector === "#video-title") return titleNode;
       if (selector === "#channel-name") return channelNode;
+      if (selector === "badge-shape.ytBadgeShapeLive") return live ? { className: "ytBadgeShapeLive" } : null;
       return null;
     },
     querySelectorAll(selector) {
