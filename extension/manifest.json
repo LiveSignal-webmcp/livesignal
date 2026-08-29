@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LiveSignal",
   "short_name": "LiveSignal",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Give agents structured access to livestream players and realtime speech evidence.",
   "minimum_chrome_version": "149",
   "permissions": ["activeTab", "offscreen", "storage", "tabCapture"],
@@ -11,7 +11,8 @@
     "http://localhost:3000/*"
   ],
   "action": {
-    "default_title": "Start or stop LiveSignal listening"
+    "default_title": "LiveSignal realtime listening",
+    "default_popup": "popup.html"
   },
   "background": {
     "service_worker": "background.js",

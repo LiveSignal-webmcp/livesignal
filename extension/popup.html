@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LiveSignal</title>
+    <style>
+      :root { color-scheme: light; font-family: Arial, sans-serif; }
+      body { width: 290px; margin: 0; padding: 14px; color: #101010; background: #f8f7f2; }
+      .eyebrow { margin: 0 0 4px; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+      h1 { margin: 0; font-size: 21px; }
+      #status { margin: 12px 0; padding: 10px; border: 1px solid #101010; border-radius: 7px; background: white; font-size: 12px; line-height: 1.4; }
+      #status[data-state="listening"] { background: #d8ff45; }
+      #status[data-state="error"] { background: #ffd6d6; }
+      button { width: 100%; border: 1px solid #101010; border-radius: 7px; padding: 10px 12px; background: #101010; color: white; font: 800 13px Arial, sans-serif; cursor: pointer; box-shadow: 3px 3px 0 #9d8cff; }
+      button:disabled { cursor: wait; opacity: .65; }
+      .hint { margin: 10px 0 0; color: #555; font-size: 11px; line-height: 1.35; }
+    </style>
+  </head>
+  <body>
+    <p class="eyebrow">REALTIME STREAM EVIDENCE</p>
+    <h1>LiveSignal</h1>
+    <div id="status" data-state="idle">Checking this tab…</div>
+    <button id="toggle" type="button" disabled>Start listening</button>
+    <p class="hint">Keep this stream playing. Transcript evidence will appear in LiveSignal’s WebMCP tools.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

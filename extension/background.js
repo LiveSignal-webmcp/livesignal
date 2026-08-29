@@ -80,23 +80,36 @@ const startTranscription = async (tab) => {
   }
 };
 
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab.id) return;
+const toggleTranscription = async (tab) => {
+  if (!tab?.id) return initialState();
   const state = stateFor(tab.id);
   if (["connecting", "listening"].includes(state.status)) {
     await stopTranscription(tab.id);
   } else {
     await startTranscription(tab);
   }
-});
+  return stateFor(tab.id);
+};
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.target === "offscreen") return false;
 
   if (message?.type === "GET_TRANSCRIPTION_STATE") {
-    const tabId = sender.tab?.id;
+    const tabId = message.tabId || sender.tab?.id;
     sendResponse(tabId ? stateFor(tabId) : initialState());
     return false;
+  }
+
+  if (message?.type === "TOGGLE_TRANSCRIPTION" && message.tabId) {
+    chrome.tabs.get(message.tabId)
+      .then((tab) => toggleTranscription(tab))
+      .then(sendResponse)
+      .catch((error) => sendResponse({
+        ...initialState(),
+        status: "error",
+        error: String(error?.message || error)
+      }));
+    return true;
   }
 
   if (message?.source !== "livesignal-offscreen" || !message.tabId) return false;
