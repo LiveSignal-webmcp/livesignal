@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LiveSignal",
   "short_name": "LiveSignal",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Give agents structured access to livestream players and realtime speech evidence.",
   "minimum_chrome_version": "149",
   "permissions": ["activeTab", "offscreen", "storage", "tabCapture"],

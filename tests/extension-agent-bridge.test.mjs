@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-async function loadAdapter({ searchCards = [] } = {}) {
+async function loadAdapter({ searchCards = [], legacySnapshot = false } = {}) {
   const registrations = new Map();
   const elements = new Map();
   const listeners = new Map();
@@ -59,6 +59,22 @@ async function loadAdapter({ searchCards = [] } = {}) {
       };
     },
   };
+  if (legacySnapshot) {
+    const legacyScript = {
+      id: "livesignal-agent-state",
+      tagName: "SCRIPT",
+      remove() {
+        elements.delete(this.id);
+      },
+    };
+    Object.defineProperty(legacyScript, "textContent", {
+      get: () => "legacy",
+      set: () => {
+        throw new TypeError("This document requires 'TrustedScript' assignment.");
+      },
+    });
+    elements.set(legacyScript.id, legacyScript);
+  }
   const window = {
     addEventListener(type, listener) {
       if (!listeners.has(type)) listeners.set(type, []);
@@ -120,6 +136,14 @@ test("paired browser bridge exposes the same nine handlers as WebMCP", async () 
   assert.equal(snapshot.version, "1.0");
   assert.equal(snapshot.state.platform, "YouTube");
   assert.equal(document.getElementById("livesignal-agent-state").tagName, "OUTPUT");
+});
+
+test("a legacy script snapshot is replaced before Trusted Types can block JSON", async () => {
+  const { document, window } = await loadAdapter({ legacySnapshot: true });
+  const snapshotNode = document.getElementById("livesignal-agent-state");
+
+  assert.equal(snapshotNode.tagName, "OUTPUT");
+  assert.equal(window.LiveSignalAgent.getSnapshot().version, "1.0");
 });
 
 test("live discovery prefers exact-topic commentary over generic or automated feeds", async () => {

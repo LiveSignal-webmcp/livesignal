@@ -132,6 +132,10 @@
 
   const updateAgentSnapshot = (state) => {
     let snapshot = document.getElementById("livesignal-agent-state");
+    if (snapshot && snapshot.tagName !== "OUTPUT") {
+      snapshot.remove();
+      snapshot = null;
+    }
     if (!snapshot) {
       snapshot = document.createElement("output");
       snapshot.id = "livesignal-agent-state";
