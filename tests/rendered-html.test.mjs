@@ -8,27 +8,36 @@ async function render() {
 
   return worker.fetch(
     new Request("http://localhost/", { headers: { accept: "text/html" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    {
+      ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+    },
     { waitUntil() {}, passThroughOnException() {} },
   );
 }
 
-test("server-renders the verified LiveSignal adapter proof with accurate framing", async () => {
+test("server-renders the collaborative China food research workspace", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>LiveSignal — livestream intelligence for agents<\/title>/i);
-  assert.match(html, /Live video, <em>without<\/em>/);
-  assert.match(html, /VERIFIED REAL-STREAM TEST/);
-  assert.match(html, /393<\/strong>transcript segments/);
-  assert.match(html, /9<\/strong>tools registered/);
-  assert.match(html, /youtube\.com\/watch\?v=BREmL2qYfYM/);
-  assert.match(html, /STREAM DISCOVERY/);
-  assert.match(html, /PAIRED AGENT MODE/);
-  assert.match(html, /Approve once/);
-  assert.match(html, /ILLUSTRATIVE WORKFLOW/);
-  assert.match(html, /sample interface data, not stream extraction/);
-  assert.doesNotMatch(html, /Your site is taking shape|Building your site|codex-preview/i);
+  assert.match(
+    html,
+    /<title>LiveSignal — research anything across YouTube<\/title>/i,
+  );
+  assert.match(html, /Ask widely/);
+  assert.match(html, /Watch selectively/);
+  assert.match(html, /universal engine in one concrete project/i);
+  assert.match(html, /Import any public YouTube video/);
+  assert.match(html, /Import latest browser evidence/);
+  assert.match(html, /Research brief/);
+  assert.match(html, /Source desk/);
+  assert.match(html, /Editable guide/);
+  assert.match(html, /Dan dan noodles/);
+  assert.match(html, /Relevant sources, not “all of YouTube”/);
+  assert.match(html, /The page stays in the conversation/);
+  assert.doesNotMatch(
+    html,
+    /Your site is taking shape|Building your site|codex-preview/i,
+  );
 });

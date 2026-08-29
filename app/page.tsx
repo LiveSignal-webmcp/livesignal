@@ -1,211 +1,1217 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import "./adapter.css";
-import "./discovery.css";
-import "./pairing.css";
-import "./proof.css";
+import {
+  DISHES,
+  EVIDENCE,
+  INITIAL,
+  SOURCES,
+  videoUrl,
+  type Source,
+  type Preferences,
+} from "./research-data";
 
-type StreamEvent = {
+type TranscriptSegment = {
   id: string;
-  time: string;
+  text: string;
   seconds: number;
-  type: "Topic" | "Milestone" | "Alert";
-  title: string;
-  detail: string;
-  quote: string;
+  durationSeconds: number;
+  timestamp: string;
 };
+type ImportedSource = Source & { url: string; transcriptCount: number };
 
-type StreamSearch = { id: "youtube" | "twitch"; platform: string; title: string; detail: string; url: string };
-
-const VERIFIED_REPLAY_URL = "https://www.youtube.com/watch?v=BREmL2qYfYM";
-const REPOSITORY_URL = "https://github.com/LiveSignal-webmcp/livesignal";
-const VERIFIED_TOOLS = ["rank_livestream_results", "get_current_stream_state", "get_transcript", "search_stream", "get_recent_events", "create_watch_rule", "get_active_watch_rules", "jump_to_timestamp", "jump_to_event"];
-
-function makeStreamSearches(query: string): StreamSearch[] {
-  const topic = query.trim() || "live streams";
-  return [
-    { id: "youtube", platform: "YouTube", title: `Search YouTube Live for “${topic}”`, detail: "Open current YouTube results, then let LiveSignal adapt the selected player.", url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${topic} live`)}` },
-    { id: "twitch", platform: "Twitch", title: `Search Twitch for “${topic}”`, detail: "Open current Twitch results, then use LiveSignal on the stream page.", url: `https://www.twitch.tv/search?term=${encodeURIComponent(topic)}` },
-  ];
-}
-
-const events: StreamEvent[] = [
-  { id: "launch", time: "00:02:10", seconds: 130, type: "Milestone", title: "The run begins", detail: "The creator starts a new challenge run.", quote: "We are going for a clean run today." },
-  { id: "ethereum", time: "00:05:15", seconds: 315, type: "Topic", title: "Ethereum discussion", detail: "A brief discussion about fees and user experience.", quote: "Ethereum fees are getting easier to reason about." },
-  { id: "announcement", time: "00:07:30", seconds: 450, type: "Alert", title: "Major announcement", detail: "The creator reveals the next community event.", quote: "Next Thursday, we are opening the community test." },
-  { id: "boss", time: "00:09:10", seconds: 550, type: "Milestone", title: "Boss defeated", detail: "The team completes the encounter on its first attempt.", quote: "That is the cleanest finish we have had all week." },
-];
-
-type ModelContextDocument = Document & {
+type ModelDocument = Document & {
   modelContext?: {
-    registerTool: (tool: { name: string; description: string; inputSchema?: object; execute: (input: Record<string, unknown>) => unknown }) => Promise<void>;
+    registerTool: (tool: {
+      name: string;
+      description: string;
+      inputSchema?: object;
+      execute: (input: Record<string, unknown>) => unknown;
+    }) => Promise<void>;
   };
 };
 
 export default function Home() {
-  const [selectedId, setSelectedId] = useState("ethereum");
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [query, setQuery] = useState("");
-  const [watchTopic, setWatchTopic] = useState("Ethereum");
-  const [watchRules, setWatchRules] = useState<string[]>(["Release date"]);
-  const [detectedEvent, setDetectedEvent] = useState<StreamEvent | null>(null);
-  const [discoveryQuery, setDiscoveryQuery] = useState("Ethereum updates");
-  const [selectedSearchId, setSelectedSearchId] = useState<StreamSearch["id"] | null>(null);
-  const [registrationStatus, setRegistrationStatus] = useState<"checking" | "registered" | "unavailable" | "error">("checking");
+  const [goal, setGoal] = useState(
+    "Build a must-try food guide for my China trip from trusted YouTube videos",
+  );
+  const [preferences, setPreferences] = useState(INITIAL);
+  const [sourceIds, setSourceIds] = useState([
+    "chengdu-deep",
+    "xian-street",
+    "shanghai-bao",
+  ]);
+  const [dishIds, setDishIds] = useState(DISHES.map((dish) => dish.id));
+  const [pinned, setPinned] = useState(["ev-liangpi", "ev-dandan"]);
+  const [focusId, setFocusId] = useState("ev-dandan");
+  const [query, setQuery] = useState(
+    "street food in Shanghai, Chengdu and Xi'an",
+  );
+  const [title, setTitle] = useState("My must-try food guide to China");
+  const [note, setNote] = useState(
+    "Prioritise everyday places near transit and markets. Keep every recommendation traceable to a video moment.",
+  );
+  const [activity, setActivity] = useState("Brief ready · 5 sources reviewed");
+  const [published, setPublished] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [importedSources, setImportedSources] = useState<ImportedSource[]>([]);
+  const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
+  const [transcriptQuery, setTranscriptQuery] = useState("");
+  const [ingestStatus, setIngestStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [ingestError, setIngestError] = useState("");
+  const [mcp, setMcp] = useState<
+    "checking" | "registered" | "unavailable" | "error"
+  >("checking");
   const registered = useRef(false);
-  const streamEvents = useMemo(() => detectedEvent ? [...events, detectedEvent] : events, [detectedEvent]);
-  const selected = streamEvents.find((event) => event.id === selectedId) ?? events[0];
-  const liveState = useRef({ events: streamEvents, selected });
+  const allSources = useMemo(
+    () => [...SOURCES, ...importedSources],
+    [importedSources],
+  );
+  const transcriptMatches = useMemo(() => {
+    const term = transcriptQuery.trim().toLowerCase();
+    return (
+      term
+        ? transcript.filter((segment) =>
+            segment.text.toLowerCase().includes(term),
+          )
+        : transcript
+    ).slice(0, 12);
+  }, [transcript, transcriptQuery]);
+  const activeDishes = useMemo(
+    () =>
+      dishIds
+        .map((id) => DISHES.find((dish) => dish.id === id)!)
+        .filter(Boolean),
+    [dishIds],
+  );
+  const focus = EVIDENCE.find((item) => item.id === focusId) ?? EVIDENCE[0];
+  const live = useRef({
+    goal,
+    preferences,
+    sourceIds,
+    dishIds,
+    pinned,
+    title,
+    note,
+    published,
+    importedSources,
+    transcript,
+  });
   useEffect(() => {
-    liveState.current = { events: streamEvents, selected };
-  }, [streamEvents, selected]);
-  const matchingEvents = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return term ? streamEvents.filter((event) => `${event.title} ${event.detail} ${event.quote}`.toLowerCase().includes(term)) : streamEvents;
-  }, [query, streamEvents]);
-  const streamSearches = useMemo(() => makeStreamSearches(discoveryQuery), [discoveryQuery]);
+    live.current = {
+      goal,
+      preferences,
+      sourceIds,
+      dishIds,
+      pinned,
+      title,
+      note,
+      published,
+      importedSources,
+      transcript,
+    };
+  }, [
+    goal,
+    preferences,
+    sourceIds,
+    dishIds,
+    pinned,
+    title,
+    note,
+    published,
+    importedSources,
+    transcript,
+  ]);
 
-  function selectEvent(event: StreamEvent) { setSelectedId(event.id); setIsPlaying(false); }
-  function addWatchRule(topic = watchTopic) {
-    const normalized = topic.trim();
-    if (!normalized) return;
-    setWatchRules((rules) => rules.some((rule) => rule.toLowerCase() === normalized.toLowerCase()) ? rules : [...rules, normalized]);
+  async function ingestYouTube(url: string) {
+    const normalized = url.trim();
+    if (!normalized) throw new Error("Paste a public YouTube URL first.");
+    setIngestStatus("loading");
+    setIngestError("");
+    const response = await fetch("/api/youtube/ingest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: normalized }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      setIngestStatus("error");
+      setIngestError(result.error ?? "The video could not be imported.");
+      throw new Error(result.error ?? "The video could not be imported.");
+    }
+    const source: ImportedSource = {
+      ...result.source,
+      city: "Imported",
+      duration: "CAPTIONS",
+      relevance: "Imported from public YouTube captions",
+      transcriptCount: result.transcript.segmentCount,
+    };
+    setImportedSources((current) => [
+      ...current.filter((item) => item.id !== source.id),
+      source,
+    ]);
+    setSourceIds((current) =>
+      current.includes(source.id) ? current : [...current, source.id],
+    );
+    setTranscript(result.transcript.segments);
+    setTranscriptQuery("");
+    setIngestStatus(result.transcript.available ? "ready" : "error");
+    setIngestError(
+      result.transcript.available
+        ? ""
+        : String(result.fallback ?? result.warning),
+    );
+    setActivity(
+      result.transcript.available
+        ? `Imported ${result.transcript.segmentCount} timestamped caption segments`
+        : "Video metadata imported · browser evidence required",
+    );
+    window.location.hash = "sources";
+    return result;
   }
-  function triggerWatchEvent(topic = watchTopic) {
-    const normalized = topic.trim() || "Your topic";
-    const event = { id: `signal-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, time: "00:10:04", seconds: 604, type: "Alert" as const, title: `${normalized} mentioned`, detail: "LiveSignal matched an active watch rule in the stream.", quote: `A new reference to ${normalized} was detected in the live feed.` };
-    setDetectedEvent(event);
-    setSelectedId(event.id);
-    setIsPlaying(false);
+
+  async function importBrowserEvidence() {
+    setIngestStatus("loading");
+    const requestId = crypto.randomUUID();
+    const snapshot = await new Promise<Record<string, unknown> | null>(
+      (resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          window.removeEventListener("message", onMessage);
+          reject(new Error("No LiveSignal extension evidence was found."));
+        }, 5000);
+        const onMessage = (event: MessageEvent) => {
+          if (
+            event.source !== window ||
+            event.data?.source !== "livesignal-extension" ||
+            event.data?.requestId !== requestId
+          )
+            return;
+          window.clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
+          if (event.data.error) reject(new Error(event.data.error));
+          else resolve(event.data.snapshot ?? null);
+        };
+        window.addEventListener("message", onMessage);
+        window.postMessage(
+          {
+            source: "livesignal-companion",
+            type: "REQUEST_EXTENSION_EVIDENCE",
+            requestId,
+          },
+          location.origin,
+        );
+      },
+    );
+    if (!snapshot)
+      throw new Error(
+        "Open a YouTube video with LiveSignal first, then return here.",
+      );
+    const state = snapshot.state as Record<string, unknown> | undefined;
+    const url = String(state?.url ?? "");
+    const videoId =
+      new URL(url).searchParams.get("v") ?? `browser-${Date.now()}`;
+    const segments = (
+      (snapshot.recentTranscript as
+        | Array<Record<string, unknown>>
+        | undefined) ?? []
+    )
+      .map((segment, index) => ({
+        id: String(segment.id ?? `${videoId}-${index}`),
+        text: String(segment.text ?? ""),
+        seconds: Number(segment.seconds ?? 0),
+        durationSeconds: Number(segment.durationSeconds ?? 0),
+        timestamp: String(segment.timestamp ?? "0:00"),
+      }))
+      .filter((segment) => segment.text);
+    const source: ImportedSource = {
+      id: videoId,
+      videoId,
+      url,
+      title: String(state?.title ?? "Browser evidence"),
+      creator: "Imported through LiveSignal extension",
+      city: "Browser adapter",
+      duration: "EVIDENCE",
+      relevance: "Native captions or realtime STT from the active browser tab",
+      transcriptCount: segments.length,
+    };
+    setImportedSources((current) => [
+      ...current.filter((item) => item.id !== source.id),
+      source,
+    ]);
+    setSourceIds((current) =>
+      current.includes(source.id) ? current : [...current, source.id],
+    );
+    setTranscript(segments);
+    setTranscriptQuery("");
+    setIngestStatus("ready");
+    setIngestError("");
+    setActivity(`Imported ${segments.length} browser evidence segments`);
+    window.location.hash = "sources";
+    return {
+      source,
+      transcript: {
+        available: segments.length > 0,
+        segmentCount: segments.length,
+        segments,
+      },
+    };
   }
-  function openStreamSearch(source: StreamSearch) {
-    setSelectedSearchId(source.id);
-    window.open(source.url, "_blank", "noopener,noreferrer");
+
+  function removeDish(id: string) {
+    setDishIds((items) => items.filter((item) => item !== id));
+    setActivity("Guide edited by human");
+    setPublished(false);
+  }
+  function moveDish(id: string, direction: -1 | 1) {
+    setDishIds((items) => {
+      const next = [...items];
+      const from = next.indexOf(id);
+      const to = Math.max(0, Math.min(next.length - 1, from + direction));
+      if (from < 0 || from === to) return items;
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+    setActivity("Editorial order updated");
+    setPublished(false);
+  }
+  function revise(instruction: string) {
+    setDishIds(
+      DISHES.filter(
+        (dish) => dish.price === "$" && dish.id !== "shengjian",
+      ).map((dish) => dish.id),
+    );
+    setNote(
+      `Agent revision: ${instruction}. Lower-cost street food now leads; shellfish warnings and source citations were preserved.`,
+    );
+    setActivity("Agent revised the guide · citations preserved");
+    setPublished(false);
+    window.location.hash = "guide";
   }
 
   useEffect(() => {
-    const page = document as ModelContextDocument;
+    const page = document as ModelDocument;
     if (!page.modelContext) {
-      window.setTimeout(() => setRegistrationStatus("unavailable"), 0);
+      setTimeout(() => setMcp("unavailable"), 0);
       return;
     }
     if (registered.current) return;
     registered.current = true;
-    const registrations: Promise<void>[] = [];
-    const tool = (name: string, description: string, execute: (input: Record<string, unknown>) => unknown, inputSchema?: object) =>
-      registrations.push(page.modelContext!.registerTool({ name, description, inputSchema, execute }));
-    tool("get_stream_info", "Returns the verified real-stream test, source URL, adapter status, and available evidence.", () => ({ title: "CRYPTO LIVE - THE ETHEREUM BREAKOUT", creator: "Jordan Camirand", status: "verified YouTube live replay test", sourceUrl: VERIFIED_REPLAY_URL, currentEvidence: liveState.current.selected.title, adapter: "LiveSignal browser adapter" }));
-    tool("get_recent_events", "Returns the latest timestamped livestream events with evidence.", () => liveState.current.events);
-    tool("search_stream", "Searches event titles, summaries, and transcript evidence for a topic or phrase.", (input) => {
-      const search = String(input.query ?? "").toLowerCase();
-      return liveState.current.events.filter((event) => `${event.title} ${event.detail} ${event.quote}`.toLowerCase().includes(search));
-    }, { type: "object", properties: { query: { type: "string", description: "Topic, person, or phrase to find in the stream." } }, required: ["query"] });
-    tool("jump_to_event", "Seeks the visible player, highlights the event, and reveals transcript evidence.", (input) => {
-      const event = liveState.current.events.find((item) => item.id === input.eventId);
-      if (!event) return { ok: false, error: "Unknown event id" };
-      selectEvent(event);
-      return { ok: true, timestamp: event.time, title: event.title };
-    }, { type: "object", properties: { eventId: { type: "string", description: "The id of the event to show in the player." } }, required: ["eventId"] });
-    tool("create_watch_rule", "Creates a visible topic-monitoring rule for this stream.", (input) => {
-      const topic = String(input.topic ?? "").trim();
-      addWatchRule(topic);
-      window.setTimeout(() => triggerWatchEvent(topic), 2400);
-      return { ok: Boolean(topic), topic, status: "active" };
-    }, { type: "object", properties: { topic: { type: "string", description: "Topic or phrase to monitor in this stream." } }, required: ["topic"] });
-    tool("search_livestreams", "Finds current YouTube Live and Twitch search pages for a topic. Use this before opening a stream to monitor.", (input) => {
-      const search = String(input.query ?? "").trim();
-      return makeStreamSearches(search);
-    }, { type: "object", properties: { query: { type: "string", description: "The topic, person, game, or event to find live streams about." } }, required: ["query"] });
-    tool("open_livestream_search", "Opens a selected platform's current stream-search page in a new browser tab. Use only when the user asks to browse results.", (input) => {
-      const search = String(input.query ?? "").trim();
-      const platform = String(input.platform ?? "youtube").toLowerCase();
-      const source = makeStreamSearches(search).find((item) => item.id === platform) ?? makeStreamSearches(search)[0];
-      openStreamSearch(source);
-      return { ok: true, platform: source.platform, url: source.url, nextStep: "Open a result, then use the LiveSignal extension on the stream player." };
-    }, { type: "object", properties: { query: { type: "string", description: "The live-stream topic to search for." }, platform: { type: "string", enum: ["youtube", "twitch"], description: "Platform whose results page should open." } }, required: ["query"] });
-    Promise.all(registrations).then(() => setRegistrationStatus("registered")).catch(() => setRegistrationStatus("error"));
-  // WebMCP tools deliberately register once for the active stream page.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const jobs: Promise<void>[] = [];
+    const tool = (
+      name: string,
+      description: string,
+      execute: (input: Record<string, unknown>) => unknown,
+      inputSchema?: object,
+    ) =>
+      jobs.push(
+        page.modelContext!.registerTool({
+          name,
+          description,
+          execute,
+          inputSchema,
+        }),
+      );
+    tool(
+      "get_workspace_state",
+      "Returns the visible travel brief, selected sources, timestamped evidence, dish order, and publication status.",
+      () => ({
+        ...live.current,
+        sources: [...SOURCES, ...live.current.importedSources].filter((s) =>
+          live.current.sourceIds.includes(s.id),
+        ),
+        dishes: live.current.dishIds.map((id) =>
+          DISHES.find((d) => d.id === id),
+        ),
+        evidence: EVIDENCE,
+        importedTranscript: live.current.transcript,
+      }),
+    );
+    tool(
+      "set_research_goal",
+      "Starts or updates the universal video-research goal shown in LiveSignal. Optionally clears the China example so the human and agent can build a new report together.",
+      (input) => {
+        const nextGoal = String(input.goal ?? "").trim();
+        if (!nextGoal)
+          return { ok: false, error: "A research goal is required." };
+        setGoal(nextGoal);
+        setQuery(nextGoal);
+        setActivity("Agent updated the research goal");
+        if (input.clearExample === true) {
+          setSourceIds([]);
+          setDishIds([]);
+          setPinned([]);
+          setImportedSources([]);
+          setTranscript([]);
+          setTitle(
+            String(input.reportTitle ?? "Untitled video research report"),
+          );
+          setNote(
+            "The agent is gathering timestamped evidence. Edit this report as the research develops.",
+          );
+        }
+        return {
+          ok: true,
+          goal: nextGoal,
+          exampleCleared: input.clearExample === true,
+        };
+      },
+      {
+        type: "object",
+        properties: {
+          goal: { type: "string" },
+          clearExample: { type: "boolean" },
+          reportTitle: { type: "string" },
+        },
+        required: ["goal"],
+      },
+    );
+    tool(
+      "ingest_youtube_video",
+      "Imports a public YouTube video's metadata and timestamped captions into the visible source desk. If captions are unavailable, returns guidance to use the LiveSignal browser adapter or realtime STT.",
+      async (input) => ingestYouTube(String(input.url ?? "")),
+      {
+        type: "object",
+        properties: {
+          url: {
+            type: "string",
+            description:
+              "Public YouTube watch, shorts, live, embed URL, youtu.be URL, or video ID.",
+          },
+        },
+        required: ["url"],
+      },
+    );
+    tool(
+      "import_browser_evidence",
+      "Imports the latest native-caption or realtime-STT evidence collected by the user-authorized LiveSignal browser extension into this visible workspace.",
+      async () => importBrowserEvidence(),
+    );
+    tool(
+      "search_video_evidence",
+      "Searches imported timestamped YouTube captions for a topic, claim, person, or phrase and returns source moments suitable for citations.",
+      (input) => {
+        const term = String(input.query ?? "")
+          .trim()
+          .toLowerCase();
+        const matches = live.current.transcript
+          .filter((segment) => segment.text.toLowerCase().includes(term))
+          .slice(0, 50);
+        setTranscriptQuery(String(input.query ?? ""));
+        setActivity(`Agent found ${matches.length} caption matches`);
+        return {
+          query: input.query,
+          matches,
+          segmentCount: live.current.transcript.length,
+        };
+      },
+      {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    );
+    tool(
+      "write_report",
+      "Writes or revises the visible report title and editable overview after researching video evidence. The human can continue editing both fields directly.",
+      (input) => {
+        const nextTitle = String(input.title ?? live.current.title);
+        const overview = String(input.overview ?? live.current.note);
+        setTitle(nextTitle);
+        setNote(overview);
+        setPublished(false);
+        setActivity("Agent drafted the editable report");
+        window.location.hash = "guide";
+        return { ok: true, title: nextTitle, overview };
+      },
+      {
+        type: "object",
+        properties: { title: { type: "string" }, overview: { type: "string" } },
+        required: ["title", "overview"],
+      },
+    );
+    tool(
+      "set_travel_preferences",
+      "Updates the visible brief with cities, tastes, dietary restrictions, budget, and travel style.",
+      (input) => {
+        const next: Preferences = {
+          cities: Array.isArray(input.cities)
+            ? input.cities.map(String)
+            : live.current.preferences.cities,
+          loves: Array.isArray(input.loves)
+            ? input.loves.map(String)
+            : live.current.preferences.loves,
+          avoids: Array.isArray(input.avoids)
+            ? input.avoids.map(String)
+            : live.current.preferences.avoids,
+          budget: String(input.budget ?? live.current.preferences.budget),
+          style: String(input.style ?? live.current.preferences.style),
+        };
+        setPreferences(next);
+        setActivity("Agent updated the research brief");
+        return { ok: true, preferences: next };
+      },
+      {
+        type: "object",
+        properties: {
+          cities: { type: "array", items: { type: "string" } },
+          loves: { type: "array", items: { type: "string" } },
+          avoids: { type: "array", items: { type: "string" } },
+          budget: { type: "string" },
+          style: { type: "string" },
+        },
+      },
+    );
+    tool(
+      "search_video_sources",
+      "Finds relevant YouTube candidates and exposes them in the visible source desk.",
+      (input) => {
+        const q = String(input.query ?? "China food");
+        setQuery(q);
+        setActivity(`Agent found ${SOURCES.length} candidate videos`);
+        window.location.hash = "sources";
+        return {
+          query: q,
+          candidates: SOURCES,
+          caveat: "Relevant candidates; not all of YouTube",
+        };
+      },
+      {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    );
+    tool(
+      "add_video_source",
+      "Adds a candidate video to the shared research set.",
+      (input) => {
+        const id = String(input.sourceId ?? "");
+        const source = SOURCES.find((s) => s.id === id);
+        if (!source) return { ok: false };
+        setSourceIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
+        setActivity("Agent added a source");
+        return { ok: true, source };
+      },
+      {
+        type: "object",
+        properties: { sourceId: { type: "string" } },
+        required: ["sourceId"],
+      },
+    );
+    tool(
+      "analyze_video_source",
+      "Shows timestamped food evidence available for a selected source.",
+      (input) => {
+        const sourceId = String(input.sourceId ?? "");
+        const evidence = EVIDENCE.filter((e) => e.sourceId === sourceId);
+        if (evidence[0]) setFocusId(evidence[0].id);
+        setActivity(`Agent analyzed ${evidence.length} evidence moments`);
+        return { sourceId, evidence };
+      },
+      {
+        type: "object",
+        properties: { sourceId: { type: "string" } },
+        required: ["sourceId"],
+      },
+    );
+    tool(
+      "find_food_recommendations",
+      "Searches current evidence for dishes matching a city, taste, or dietary constraint.",
+      (input) => {
+        const q = String(input.query ?? "").toLowerCase();
+        const matches = DISHES.filter((d) =>
+          `${d.name} ${d.chinese} ${d.city} ${d.description} ${d.warning}`
+            .toLowerCase()
+            .includes(q),
+        );
+        if (matches[0]) setFocusId(matches[0].evidenceIds[0]);
+        setActivity(`Agent found ${matches.length} matching recommendations`);
+        return { query: q, matches };
+      },
+      {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    );
+    tool(
+      "pin_evidence",
+      "Pins a timestamped source moment in the shared workspace.",
+      (input) => {
+        const id = String(input.evidenceId ?? "");
+        if (!EVIDENCE.some((e) => e.id === id)) return { ok: false };
+        setPinned((ids) => (ids.includes(id) ? ids : [...ids, id]));
+        setFocusId(id);
+        setActivity("Agent pinned source evidence");
+        return { ok: true, evidence: EVIDENCE.find((e) => e.id === id) };
+      },
+      {
+        type: "object",
+        properties: { evidenceId: { type: "string" } },
+        required: ["evidenceId"],
+      },
+    );
+    tool(
+      "add_dish",
+      "Adds an evidence-backed dish to the visible guide.",
+      (input) => {
+        const id = String(input.dishId ?? "");
+        const dish = DISHES.find((d) => d.id === id);
+        if (!dish) return { ok: false };
+        setDishIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
+        setActivity("Agent added a dish");
+        return { ok: true, dish };
+      },
+      {
+        type: "object",
+        properties: { dishId: { type: "string" } },
+        required: ["dishId"],
+      },
+    );
+    tool(
+      "remove_dish",
+      "Removes a dish from the visible guide at the user's editorial direction.",
+      (input) => {
+        const id = String(input.dishId ?? "");
+        removeDish(id);
+        return { ok: true, removed: id };
+      },
+      {
+        type: "object",
+        properties: { dishId: { type: "string" } },
+        required: ["dishId"],
+      },
+    );
+    tool(
+      "reorder_dishes",
+      "Moves a dish up or down in the visible editorial order.",
+      (input) => {
+        moveDish(
+          String(input.dishId ?? ""),
+          String(input.direction) === "down" ? 1 : -1,
+        );
+        return { ok: true };
+      },
+      {
+        type: "object",
+        properties: {
+          dishId: { type: "string" },
+          direction: { type: "string", enum: ["up", "down"] },
+        },
+        required: ["dishId", "direction"],
+      },
+    );
+    tool(
+      "revise_guide",
+      "Revises the visible guide while preserving source citations and dietary constraints.",
+      (input) => {
+        const instruction = String(
+          input.instruction ?? "Prioritise affordable street food",
+        );
+        revise(instruction);
+        return {
+          ok: true,
+          instruction,
+          citationsPreserved: true,
+          restrictionsPreserved: true,
+        };
+      },
+      {
+        type: "object",
+        properties: { instruction: { type: "string" } },
+        required: ["instruction"],
+      },
+    );
+    tool(
+      "open_video_timestamp",
+      "Opens the exact YouTube moment for cited evidence and focuses that evidence in LiveSignal.",
+      (input) => {
+        const evidence = EVIDENCE.find((e) => e.id === input.evidenceId);
+        const source =
+          evidence && SOURCES.find((s) => s.id === evidence.sourceId);
+        if (!evidence || !source) return { ok: false };
+        setFocusId(evidence.id);
+        const url = videoUrl(source, evidence.seconds);
+        window.open(url, "_blank", "noopener,noreferrer");
+        return { ok: true, url, timestamp: evidence.time };
+      },
+      {
+        type: "object",
+        properties: { evidenceId: { type: "string" } },
+        required: ["evidenceId"],
+      },
+    );
+    tool(
+      "publish_guide",
+      "Publishes the reviewed guide after the human approves its sources and recommendations.",
+      () => {
+        setPublished(true);
+        setActivity("Guide published · citations locked");
+        window.location.hash = "guide";
+        return {
+          ok: true,
+          title: live.current.title,
+          dishCount: live.current.dishIds.length,
+        };
+      },
+    );
+    Promise.all(jobs)
+      .then(() => setMcp("registered"))
+      .catch(() => setMcp("error"));
+    // Handlers read current UI state through live.
   }, []);
 
-  return <main>
-    <nav className="topbar" aria-label="Primary navigation">
-      <a className="brand" href="#top" aria-label="LiveSignal home"><span className="brand-mark" />LiveSignal</a>
-      <div className="nav-links"><a href="#verified-test">Real test</a><a href="#paired-agent">Paired agent</a><a href="#discover">Discover</a><a href="#watch">Workflow</a></div>
-      <a className="outline-button" href="#how-it-works">How it works</a>
-    </nav>
-
-    <section className="hero" id="top">
-      <div className="eyebrow"><span className="live-dot" /> LIVE INTELLIGENCE</div>
-      <h1>Live video, <em>without</em><br />the watch time.</h1>
-      <p>LiveSignal turns streams into evidence-backed events. Ask an agent what happened, what matters, and where to find it.</p>
-      <div className="hero-actions"><a className="primary-button" href="#verified-test">View the real test <span>→</span></a><a className="text-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open source replay ↗</a></div>
-      <div className="signal-line" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
-    </section>
-
-    <section className="verified-test" id="verified-test" aria-labelledby="verified-title">
-      <div className="verified-heading">
-        <div><p className="eyebrow"><span className="verified-dot" /> VERIFIED REAL-STREAM TEST</p><h2 id="verified-title">A real replay.<br />Real transcript evidence.</h2></div>
-        <p>LiveSignal was loaded on an existing YouTube live replay, registered its semantic WebMCP tools, indexed the transcript YouTube exposed, and found the requested topic with source timestamps.</p>
-      </div>
-      <div className="verified-grid">
-        <article className="proof-card proof-summary">
-          <div className="proof-card-top"><span>TEST RESULT</span><b>PASS</b></div>
-          <h3>CRYPTO LIVE — THE ETHEREUM BREAKOUT</h3>
-          <p className="proof-source">YouTube live replay · tested August 28, 2026</p>
-          <div className="proof-stats"><span><strong>9</strong>tools registered</span><span><strong>393</strong>transcript segments</span><span><strong>0:09</strong>first Ethereum match</span></div>
-          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href="/livesignal-extension-v0.4.3.zip" download>Download extension</a><a className="text-button" href={`${REPOSITORY_URL}/tree/main/plugins/livesignal`} target="_blank" rel="noreferrer">Agent plugin</a></div>
-        </article>
-        <article className="proof-card proof-output">
-          <div className="proof-card-top"><span>AGENT EVIDENCE</span><b>search_stream</b></div>
-          <p className="prompt-line"><span>›</span> Search this stream for “Ethereum.”</p>
-          <div className="match-line"><time>0:09</time><span><b>Ethereum mentioned</b><small>“Big day for Ethereum.”</small></span><em>source evidence</em></div>
-          <div className="match-line"><time>0:50</time><span><b>Price context</b><small>“Ethereum over here at 2,243.”</small></span><em>source evidence</em></div>
-          <p className="proof-footnote">The agent can pass either result to <code>jump_to_event</code> and seek the existing player.</p>
-        </article>
-      </div>
-      <div className="tool-strip"><span>REAL ADAPTER TOOLS</span><div>{VERIFIED_TOOLS.map((toolName) => <code key={toolName}>{toolName}</code>)}</div></div>
-      <p className={`webmcp-check ${registrationStatus}`}><span /> Hosted Companion WebMCP: {registrationStatus === "registered" ? "tools registered" : registrationStatus === "unavailable" ? "open in a WebMCP-enabled browser" : registrationStatus === "error" ? "registration failed" : "checking support"}</p>
-    </section>
-
-    <section className="pairing" id="paired-agent" aria-labelledby="pairing-title">
-      <div className="pairing-copy">
-        <p className="eyebrow">PAIRED AGENT MODE</p>
-        <h2 id="pairing-title">Approve once.<br />Then just ask.</h2>
-        <p>Codex handles search and navigation. LiveSignal stays attached to the approved tab and turns each selected stream into timestamped evidence.</p>
-        <div className="pairing-badges"><span>WebMCP native</span><span>Browser-control bridge</span><span>Realtime STT</span></div>
-      </div>
-      <ol className="pairing-flow">
-        <li><b>1</b><span><strong>Human consent</strong><small>Enable LiveSignal once for the dedicated research tab.</small></span></li>
-        <li><b>2</b><span><strong>Agent navigation</strong><small>Search live results and move between YouTube or Twitch streams.</small></span></li>
-        <li><b>3</b><span><strong>Evidence, not guesses</strong><small>Read, search, and cite transcript lines with source timestamps.</small></span></li>
-      </ol>
-    </section>
-
-    <section className="discovery" id="discover" aria-label="Find a livestream to monitor">
-      <div className="discovery-copy"><p className="eyebrow">STREAM DISCOVERY</p><h2>Find the stream.<br />Then find the signal.</h2><p>Ask your agent to search a topic. LiveSignal opens current platform results, and the extension activates once a stream is selected.</p></div>
-      <div className="discovery-tool"><div className="discovery-input"><span>⌕</span><input value={discoveryQuery} onChange={(event) => setDiscoveryQuery(event.target.value)} aria-label="Topic to find livestreams about" placeholder="e.g. Ethereum updates" /><button type="button" onClick={() => openStreamSearch(streamSearches[0])}>Find streams</button></div><p className="discovery-hint">Try: “Find a live stream about Ethereum updates on YouTube.”</p><div className="search-results">{streamSearches.map((source) => <article key={source.id} className={`source-card ${selectedSearchId === source.id ? "selected-source" : ""}`}><span className={`platform-tag ${source.id}`}>{source.platform}</span><div><h3>{source.title}</h3><p>{source.detail}</p></div><button type="button" onClick={() => openStreamSearch(source)}>Open results ↗</button></article>)}</div></div>
-    </section>
-
-    <section className="workspace" id="watch" aria-label="Live stream monitoring demo">
-      <div className="stream-header"><div><p className="overline">ILLUSTRATIVE WORKFLOW</p><h2>How evidence becomes an answer</h2><p className="muted">Interactive product preview · sample interface data, not stream extraction</p></div><div className="stream-status"><span className="preview-dot" /> INTERACTION PREVIEW</div></div>
-      <div className="adapter-bar"><span className="adapter-icon">↗</span><span><b>The verified result is above.</b> This secondary workspace demonstrates how a person reviews evidence, events, and watch rules after the adapter responds.</span><button type="button" onClick={() => triggerWatchEvent()}>Simulate signal</button></div>
-      {detectedEvent && <button className="signal-notice" type="button" onClick={() => selectEvent(detectedEvent)}><span className="live-dot" /><span><b>New signal: {detectedEvent.title}</b><small>{detectedEvent.time} · View matching evidence</small></span><strong>Show →</strong></button>}
-      <div className="monitor-grid">
-        <div className="player-panel" aria-label="Stream player">
-          <div className="video-stage"><div className="video-grid" /><div className="video-title"><span>LIVE</span> Session 04 / Level Up</div><div className="avatar"><span>MC</span></div><div className="video-copy"><p>CREATOR FEED</p><strong>Building in public,<br />one level at a time.</strong></div><button className="play-button" type="button" aria-label={isPlaying ? "Pause stream" : "Play stream"} onClick={() => setIsPlaying((playing) => !playing)}>{isPlaying ? "Ⅱ" : "▶"}</button><div className="player-controls"><span>{selected.time}</span><div className="track"><i style={{ width: `${Math.min(100, (selected.seconds / 600) * 100)}%` }} /></div><span>10:00</span><span className="volume">◖</span></div></div>
-          <div className="evidence-card"><span className={`event-pill ${selected.type.toLowerCase()}`}>{selected.type}</span><div><p>Selected evidence · {selected.time}</p><strong>{selected.title}</strong><span className="quote">“{selected.quote}”</span></div><button type="button" onClick={() => selectEvent(selected)}>Show moment →</button></div>
+  return (
+    <main>
+      <nav className="topbar">
+        <Brand />
+        <div className="nav-links">
+          <a href="#brief">Brief</a>
+          <a href="#sources">Sources</a>
+          <a href="#guide">Guide</a>
+          <a href="/livesignal-extension-v0.5.0.zip" download>
+            Extension
+          </a>
         </div>
-        <aside className="events-panel" id="events"><div className="panel-heading"><div><p className="overline">LIVE TIMELINE</p><h3>Events that matter</h3></div><span>{streamEvents.length} found</span></div><label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this stream" aria-label="Search this stream" /></label><div className="event-list">{matchingEvents.map((event) => <button type="button" className={`event-row ${event.id === selectedId ? "selected" : ""}`} onClick={() => selectEvent(event)} key={event.id}><time>{event.time}</time><span className={`event-dot ${event.type.toLowerCase()}`} /><span><b>{event.title}</b><small>{event.detail}</small></span></button>)}{!matchingEvents.length && <p className="empty-state">No matching events yet.</p>}</div></aside>
-      </div>
-      <div className="bottom-grid">
-        <section className="transcript"><div className="panel-heading"><div><p className="overline">SOURCE EVIDENCE</p><h3>Timestamped transcript</h3></div><button type="button">View all</button></div><p><time>00:05:11</time><span>So the part people keep missing is that the experience has to feel simple.</span></p><p className="active-line"><time>00:05:15</time><span>Ethereum fees are getting easier to reason about, but there is more work to do.</span></p><p><time>00:05:22</time><span>That is why we are testing the new flow with the community next week.</span></p></section>
-        <section className="watch-rules"><div className="panel-heading"><div><p className="overline">MONITOR</p><h3>Watch rules</h3></div><span className="rules-count">{watchRules.length} active</span></div><div className="rule-chips">{watchRules.map((rule) => <span key={rule}>{rule}<button type="button" onClick={() => setWatchRules((rules) => rules.filter((item) => item !== rule))} aria-label={`Remove ${rule}`}>×</button></span>)}</div><div className="add-rule"><input value={watchTopic} onChange={(event) => setWatchTopic(event.target.value)} aria-label="Topic to monitor" placeholder="Topic to monitor" /><button type="button" onClick={() => addWatchRule()}>Add</button></div></section>
-      </div>
-    </section>
+        <div className={`mcp-status ${mcp}`}>
+          <i />
+          {mcp === "registered"
+            ? "18 WebMCP tools ready"
+            : mcp === "unavailable"
+              ? "Open in WebMCP browser"
+              : mcp === "error"
+                ? "WebMCP unavailable"
+                : "Checking WebMCP"}
+        </div>
+      </nav>
+      <header className="project-hero" id="top">
+        <div className="hero-kicker">
+          UNIVERSAL YOUTUBE RESEARCH / PERSON + AGENT
+        </div>
+        <div className="hero-grid">
+          <div>
+            <p className="issue-label">TURN VIDEO INTO WORKING KNOWLEDGE</p>
+            <h1>
+              Ask widely.
+              <br />
+              <em>Watch selectively.</em>
+            </h1>
+          </div>
+          <div className="hero-copy">
+            <p>
+              Research any subject across YouTube, collect timestamped evidence,
+              and shape it with your agent into something useful.
+            </p>
+            <div className="hero-proof">
+              <b>Any</b>
+              <span>research topic</span>
+              <b>1</b>
+              <span>shared workspace</span>
+              <b>18</b>
+              <span>WebMCP tools</span>
+            </div>
+          </div>
+        </div>
+        <div className="route-line">
+          <span>DISCOVER</span>
+          <i />
+          <span>VERIFY</span>
+          <i />
+          <span>CREATE</span>
+        </div>
+        <div className="universal-composer">
+          <span>What should LiveSignal research?</span>
+          <input
+            value={goal}
+            onChange={(event) => setGoal(event.target.value)}
+            aria-label="Universal YouTube research goal"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setQuery(goal);
+              setActivity("Research goal updated by human");
+              window.location.hash = "sources";
+            }}
+          >
+            Start research →
+          </button>
+        </div>
+      </header>
+      <section className="workspace-shell">
+        <div className="workspace-head">
+          <div>
+            <span className="section-no">EXAMPLE WORKSPACE / CHINA FOOD</span>
+            <h2>See the universal engine in one concrete project</h2>
+          </div>
+          <div className="activity">
+            <span className="agent-pulse" />
+            <p>
+              <b>LiveSignal agent</b>
+              {activity}
+            </p>
+          </div>
+        </div>
+        <div className="research-grid">
+          <aside className="brief-panel" id="brief">
+            <PanelLabel
+              number="01"
+              title="Research brief"
+              sub="Human direction"
+            />
+            <h3>What should this guide know about you?</h3>
+            <Preference label="Cities" values={preferences.cities} tone="red" />
+            <Preference
+              label="I love"
+              values={preferences.loves}
+              tone="green"
+            />
+            <Preference label="Avoid" values={preferences.avoids} tone="dark" />
+            <dl className="preference-details">
+              <div>
+                <dt>Budget</dt>
+                <dd>{preferences.budget}</dd>
+              </div>
+              <div>
+                <dt>Travel style</dt>
+                <dd>{preferences.style}</dd>
+              </div>
+            </dl>
+            <div className="brief-prompt">
+              <span>Agent brief</span>
+              <p>
+                Find essential dishes across my three cities. Prioritise spicy
+                noodles and street food. Exclude shellfish and keep every claim
+                traceable.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPreferences(INITIAL);
+                  setActivity("Human restored the original brief");
+                }}
+              >
+                Reset brief
+              </button>
+            </div>
+          </aside>
+          <section className="source-panel" id="sources">
+            <PanelLabel
+              number="02"
+              title="Source desk"
+              sub="Agent research, human judgment"
+            />
+            <div className="youtube-import">
+              <div>
+                <b>Import any public YouTube video</b>
+                <span>Metadata + timestamped captions</span>
+              </div>
+              <input
+                value={youtubeUrl}
+                onChange={(event) => setYoutubeUrl(event.target.value)}
+                placeholder="https://youtube.com/watch?v=…"
+                aria-label="YouTube URL to import"
+              />
+              <button
+                type="button"
+                disabled={ingestStatus === "loading"}
+                onClick={() => ingestYouTube(youtubeUrl).catch(() => undefined)}
+              >
+                {ingestStatus === "loading" ? "Importing…" : "Import video"}
+              </button>
+            </div>
+            {ingestError && (
+              <p className="ingest-error">
+                {ingestError} Use the LiveSignal extension for videos without
+                public captions.
+              </p>
+            )}
+            <button
+              className="extension-import"
+              type="button"
+              onClick={() =>
+                importBrowserEvidence().catch((error) => {
+                  setIngestStatus("error");
+                  setIngestError(String(error.message || error));
+                })
+              }
+            >
+              Import latest browser evidence
+            </button>
+            <label className="source-search">
+              <span>⌕</span>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Video research query"
+              />
+              <button
+                type="button"
+                onClick={() =>
+                  setActivity(`Agent found ${SOURCES.length} candidate videos`)
+                }
+              >
+                Research
+              </button>
+            </label>
+            <p className="coverage-note">
+              <b>{sourceIds.length} included</b> of {allSources.length} reviewed
+              · Relevant sources, not “all of YouTube”
+            </p>
+            <p className="prototype-note">
+              Prototype research dataset · source URLs are real; excerpts and
+              timestamps require transcript verification before submission.
+            </p>
+            <div className="source-list">
+              {allSources.map((source) => {
+                const included = sourceIds.includes(source.id);
+                const fixtureCount = EVIDENCE.filter(
+                  (e) => e.sourceId === source.id,
+                ).length;
+                const count =
+                  "transcriptCount" in source
+                    ? Number(source.transcriptCount)
+                    : fixtureCount;
+                return (
+                  <article
+                    className={`video-source ${included ? "included" : ""}`}
+                    key={source.id}
+                  >
+                    <a
+                      className="video-thumb"
+                      href={videoUrl(source)}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        backgroundImage: `url(https://i.ytimg.com/vi/${source.videoId}/mqdefault.jpg)`,
+                      }}
+                    >
+                      <span>{source.duration}</span>
+                      <i>▶</i>
+                    </a>
+                    <div className="source-copy">
+                      <span>{source.city} · YouTube</span>
+                      <h4>{source.title}</h4>
+                      <p>
+                        {source.creator} · {source.relevance}
+                      </p>
+                      <small>
+                        {count
+                          ? `${count} timed caption segment${count === 1 ? "" : "s"}`
+                          : "Candidate · analysis pending"}
+                      </small>
+                    </div>
+                    <button
+                      className="include-button"
+                      type="button"
+                      onClick={() => {
+                        setSourceIds((ids) =>
+                          included
+                            ? ids.filter((id) => id !== source.id)
+                            : [...ids, source.id],
+                        );
+                        setActivity("Source desk updated by human");
+                      }}
+                    >
+                      {included ? "✓" : "+"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+            {transcript.length > 0 && (
+              <div className="transcript-engine">
+                <div>
+                  <span>CAPTION ENGINE · {transcript.length} SEGMENTS</span>
+                  <input
+                    value={transcriptQuery}
+                    onChange={(event) => setTranscriptQuery(event.target.value)}
+                    placeholder="Search imported evidence"
+                    aria-label="Search imported captions"
+                  />
+                </div>
+                <div>
+                  {transcriptMatches.map((segment) => (
+                    <button
+                      type="button"
+                      key={segment.id}
+                      onClick={() => {
+                        const source = importedSources.at(-1);
+                        if (source)
+                          window.open(
+                            `${source.url}&t=${Math.floor(segment.seconds)}s`,
+                            "_blank",
+                            "noopener,noreferrer",
+                          );
+                      }}
+                    >
+                      <b>{segment.timestamp}</b>
+                      <span>{segment.text}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="evidence-focus">
+              <div className="evidence-head">
+                <span>EVIDENCE IN FOCUS</span>
+                <button
+                  className={pinned.includes(focus.id) ? "pinned" : ""}
+                  type="button"
+                  onClick={() =>
+                    setPinned((ids) =>
+                      ids.includes(focus.id)
+                        ? ids.filter((id) => id !== focus.id)
+                        : [...ids, focus.id],
+                    )
+                  }
+                >
+                  {pinned.includes(focus.id) ? "★ Pinned" : "☆ Pin"}
+                </button>
+              </div>
+              <blockquote>“{focus.quote}”</blockquote>
+              <p>{focus.note}</p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const s = SOURCES.find(
+                      (item) => item.id === focus.sourceId,
+                    )!;
+                    window.open(
+                      videoUrl(s, focus.seconds),
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }}
+                >
+                  <b>{focus.time}</b> Open source moment ↗
+                </button>
+                <span>{focus.confidence}% evidence confidence</span>
+              </div>
+            </div>
+          </section>
+        </div>
+        <section className="guide-panel" id="guide">
+          <div className="guide-toolbar">
+            <PanelLabel
+              number="03"
+              title="Editable guide"
+              sub="Created together"
+              light
+            />
+            <div className="guide-actions">
+              <button
+                type="button"
+                onClick={() =>
+                  revise(
+                    "Replace expensive restaurants with street-food alternatives",
+                  )
+                }
+              >
+                Ask agent to revise
+              </button>
+              <button
+                className={published ? "published" : "publish"}
+                type="button"
+                onClick={() => {
+                  setPublished(true);
+                  setActivity("Guide published · citations locked");
+                }}
+              >
+                {published ? "✓ Published" : "Publish guide"}
+              </button>
+            </div>
+          </div>
+          <div className="guide-title-row">
+            <div>
+              <p>PERSONAL FIELD GUIDE · 5 MIN READ</p>
+              <input
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setPublished(false);
+                }}
+                aria-label="Guide title"
+              />
+            </div>
+            <span>
+              {String(activeDishes.length).padStart(2, "0")}
+              <small>must-try dishes</small>
+            </span>
+          </div>
+          <textarea
+            className="editor-note"
+            value={note}
+            onChange={(e) => {
+              setNote(e.target.value);
+              setPublished(false);
+            }}
+            aria-label="Editor note"
+          />
+          <div className="dish-list">
+            {activeDishes.map((dish, index) => (
+              <article className="dish-card" key={dish.id}>
+                <div className="dish-index">
+                  {String(index + 1).padStart(2, "0")}
+                </div>
+                <div className="dish-main">
+                  <div className="dish-city">
+                    {dish.city}
+                    <span>{dish.price}</span>
+                  </div>
+                  <h3>
+                    {dish.name}
+                    <small>{dish.chinese}</small>
+                  </h3>
+                  <p className="pinyin">{dish.pinyin}</p>
+                  <p>{dish.description}</p>
+                  <div className="match-line">
+                    <span>{dish.match}</span>
+                    <span className="spice">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <i className={i < dish.spice ? "hot" : ""} key={i}>
+                          ◆
+                        </i>
+                      ))}
+                    </span>
+                  </div>
+                  <p className="warning">◌ {dish.warning}</p>
+                </div>
+                <div className="dish-evidence">
+                  <span>SOURCE PROOF</span>
+                  {dish.evidenceIds.map((id) => {
+                    const ev = EVIDENCE.find((e) => e.id === id)!;
+                    const source = SOURCES.find((s) => s.id === ev.sourceId)!;
+                    return (
+                      <button
+                        type="button"
+                        key={id}
+                        onClick={() => setFocusId(id)}
+                      >
+                        <b>{ev.time}</b>
+                        <span>
+                          {source.creator}
+                          <small>“{ev.quote}”</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="dish-controls">
+                  <button type="button" onClick={() => moveDish(dish.id, -1)}>
+                    ↑
+                  </button>
+                  <button type="button" onClick={() => moveDish(dish.id, 1)}>
+                    ↓
+                  </button>
+                  <button type="button" onClick={() => removeDish(dish.id)}>
+                    ×
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="guide-foot">
+            <p>
+              <span>Evidence policy</span>Every recommendation keeps a source
+              moment. Creator opinion and LiveSignal inference stay visibly
+              distinct.
+            </p>
+            <div>
+              <b>{pinned.length}</b> pinned moments <b>{sourceIds.length}</b>{" "}
+              active sources
+            </div>
+          </div>
+        </section>
+      </section>
+      <section className="challenge-proof">
+        <p className="section-no">WHY WEBMCP</p>
+        <h2>The page stays in the conversation.</h2>
+        <div>
+          <p>
+            <b>Human taste</b>
+            <span>
+              You set preferences, inspect sources, edit the shortlist, and
+              approve the result.
+            </span>
+          </p>
+          <p>
+            <b>Agent scale</b>
+            <span>
+              The agent structures hours of video through semantic page tools.
+            </span>
+          </p>
+          <p>
+            <b>Shared control</b>
+            <span>
+              Both operate on one visible workspace instead of an isolated chat
+              answer.
+            </span>
+          </p>
+        </div>
+      </section>
+      <footer>
+        <Brand />
+        <p>Hours of video → one guide you can trust and shape.</p>
+        <span>WebMCP Challenge · 2026</span>
+      </footer>
+    </main>
+  );
+}
 
-    <section className="how" id="how-it-works"><div><p className="eyebrow">BUILT FOR AGENTS, PROVEN FOR HUMANS</p><h2>From a long stream<br />to a clear answer.</h2></div><div className="steps"><p><b>01</b><span>The browser agent finds and opens a relevant livestream in the approved tab.</span></p><p><b>02</b><span>LiveSignal reads native captions or transcribes tab audio into timestamped evidence.</span></p><p><b>03</b><span>WebMCP lets the agent search, explain, and show the exact source moment.</span></p></div></section>
-    <footer><a className="brand" href="#top"><span className="brand-mark" />LiveSignal</a><p>Turn watch time into useful signal.</p><span>WebMCP experiment · 2026</span></footer>
-  </main>;
+function Brand() {
+  return (
+    <a className="brand" href="#top">
+      <span className="brand-seal">LS</span>
+      <span>
+        LiveSignal<small>video research desk</small>
+      </span>
+    </a>
+  );
+}
+function PanelLabel({
+  number,
+  title,
+  sub,
+  light = false,
+}: {
+  number: string;
+  title: string;
+  sub: string;
+  light?: boolean;
+}) {
+  return (
+    <div className={`panel-label ${light ? "light" : ""}`}>
+      <span>{number}</span>
+      <p>
+        {title}
+        <small>{sub}</small>
+      </p>
+    </div>
+  );
+}
+function Preference({
+  label,
+  values,
+  tone,
+}: {
+  label: string;
+  values: string[];
+  tone: "red" | "green" | "dark";
+}) {
+  return (
+    <div className="preference-group">
+      <span>{label}</span>
+      <div>
+        {values.map((value) => (
+          <em className={tone} key={value}>
+            {value}
+          </em>
+        ))}
+      </div>
+    </div>
+  );
 }

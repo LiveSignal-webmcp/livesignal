@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "LiveSignal",
   "short_name": "LiveSignal",
-  "version": "0.4.3",
-  "description": "Give agents structured access to livestream players and realtime speech evidence.",
+  "version": "0.5.0",
+  "description": "Import timestamped YouTube evidence into LiveSignal's shared agent research workspace.",
   "minimum_chrome_version": "149",
   "permissions": ["activeTab", "offscreen", "storage", "tabCapture"],
   "host_permissions": [
@@ -28,6 +28,14 @@
     {
       "matches": ["https://www.youtube.com/*", "https://www.twitch.tv/*"],
       "js": ["status-badge.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://livesignal-chi.vercel.app/*",
+        "http://localhost:3000/*"
+      ],
+      "js": ["companion-bridge.js"],
       "run_at": "document_idle"
     }
   ]

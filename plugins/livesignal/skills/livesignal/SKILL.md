@@ -1,13 +1,22 @@
 ---
 name: livesignal
-description: Find livestreams and gather reliable, timestamped information from them with LiveSignal, WebMCP, and a paired browser agent. Use when a user asks to discover a relevant live stream, research what is being discussed, search a stream transcript, monitor a topic, summarize evidence, or navigate to a source moment.
+description: Research any topic across YouTube with timestamped evidence, then create and revise a shared report in LiveSignal through WebMCP. Use for video discovery, transcript research, cited summaries, editable reports, livestream evidence, or source-moment navigation.
 ---
 
 # LiveSignal
 
-Use LiveSignal to turn supported streams into evidence an agent can search and show. Pair the LiveSignal extension with browser control: browser control discovers and navigates streams; LiveSignal handles audio, transcripts, evidence, and player actions.
+Use LiveSignal as a shared video research desk. The human defines and edits the artifact; the agent discovers YouTube sources, imports captions or browser evidence, searches timed transcript segments, and drafts the visible report.
 
-## Workflow
+## Universal research workflow
+
+1. On the Companion, call `set_research_goal` with the user's objective. Use `clearExample: true` when starting a project unrelated to the loaded China food example.
+2. Discover relevant YouTube videos with browser search. Prefer a small, diverse, credible source set rather than claiming to analyze all of YouTube.
+3. Call `ingest_youtube_video` for each selected URL. When server captions are available, use `search_video_evidence` immediately.
+4. If the result says browser evidence is required, open the video in the paired tab. Use native captions when available or the one-time user-approved realtime STT path. Return to the Companion and call `import_browser_evidence`.
+5. Search the imported evidence, keep timestamped excerpts, and use `write_report` to draft the visible artifact. The human can edit the same report directly.
+6. Revise only as requested, preserve citations and caveats, and call `publish_guide` only after the human approves the result.
+
+## Livestream adapter workflow
 
 1. For a stream the user has not selected, use `search_livestreams` when the Companion exposes it. On visible YouTube results, call `rank_livestream_results`. Prefer `topicMatch: "exact_title"` plus `likelyFormat: "spoken_commentary_likely"`; treat automated chart/signals feeds as a fallback unless the user requested one.
 2. Open the best candidate in the same paired tab and call `get_current_stream_state`. If native evidence is unavailable and `liveTranscription.status` is `idle`, explain that Chrome requires one explicit approval in the LiveSignal popup for this tab. Do not request another click once the status is `connecting` or `listening`; keep navigating in that tab.
@@ -38,10 +47,10 @@ Use this fallback only on a page where the LiveSignal extension is active. Do no
 - Chrome requires one user gesture before tab audio capture. An agent cannot bypass that boundary. After approval, continue autonomously without asking again while the same tab remains enabled.
 - Realtime capture is scoped to the approved tab and continues while that capture remains active. Evidence resets when the agent switches streams so transcript lines cannot leak across sources. Watch rules are page-local and end when the page refreshes or closes.
 - Twitch supports player state, realtime transcription after tab approval, and timestamp navigation when available.
-- The LiveSignal Companion demonstrates interaction with seeded timeline data. Do not present its demo events as extracted from a real stream.
+- The China food workspace is the loaded example project. Treat its labelled prototype excerpts as demo data until verified; imported caption and browser evidence is the real engine path.
 
 ## Good responses
 
 - “The stream mentions the release date at 12:43: ‘…’. Want me to open that moment?”
 - “This stream has no native transcript. Approve LiveSignal once for this tab; after that I can listen and search streams here without another click.”
-- “I created a tab-local watch rule for ‘Ethereum’. I’ll report matching transcript evidence while this page stays open.”
+- “I imported three videos about solid-state batteries, found five timestamped passages about manufacturing cost, and drafted the editable comparison in LiveSignal.”

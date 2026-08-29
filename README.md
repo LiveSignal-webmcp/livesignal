@@ -1,24 +1,24 @@
 # LiveSignal
 
-**Turn livestream watch time into searchable evidence.**
+**Research anything across YouTube with timestamped evidence.**
 
-LiveSignal is a WebMCP prototype for agents that need to gather information from livestreams when a person does not have time to watch. It helps an agent find streams on existing platforms, search evidence inside a supported stream, create focused watch rules, and jump to the exact moment that supports an answer.
+LiveSignal is a universal WebMCP video-research workspace. A person defines the goal and edits the result; their agent imports relevant YouTube videos, searches timed captions, pins evidence, and drafts a report in the same visible page. The China food guide is the included example project, not the product boundary.
 
 It is deliberately an adapter, not a streaming platform. The Companion web app demonstrates the interaction design; the browser extension exposes semantic tools on YouTube and Twitch pages; the Codex plugin teaches an agent how to combine stream discovery, browser navigation, and evidence retrieval.
 
 ## The problem
 
-Important information lands in long livestreams: product announcements, a creator's opinion, a game update, a release date. Existing agents can navigate a player, but that does not make the stream queryable or provide evidence for an answer.
+Useful information is scattered across long YouTube videos. Existing agents can navigate a player, but that does not automatically create a searchable, cited research artifact a person can inspect and edit.
 
 ## What is implemented
 
 ### Companion web app
 
-- WebMCP tools for stream discovery, event search, timestamp navigation, and in-page watch rules.
-- A visual timeline that demonstrates an evidence-backed agent workflow.
-- Search links for current YouTube Live and Twitch results.
-
-The Companion timeline is explicitly seeded demo data. It is used to make the product interaction legible during the demo; it is not represented as live stream analysis.
+- A universal research-goal composer and YouTube URL importer.
+- Real YouTube metadata ingestion and server-caption ingestion where YouTube permits it.
+- Browser-extension evidence import when serverless caption access is unavailable.
+- Searchable timed evidence plus a directly editable, publishable report.
+- 18 semantic WebMCP tools operating on the same visible state as the human UI.
 
 ### Browser adapter
 
@@ -31,19 +31,13 @@ The Companion timeline is explicitly seeded demo data. It is used to make the pr
 
 LiveSignal prefers native YouTube transcript text. When none is available, it uses ElevenLabs Scribe v2 Realtime after the user approves tab audio once. It does not claim visual scene understanding or persistent background monitoring after capture ends.
 
-The latest unpacked demo bundle is available from the hosted site as `livesignal-extension-v0.4.3.zip`.
+The latest unpacked demo bundle is available from the hosted site as `livesignal-extension-v0.5.0.zip`.
 
 ## WebMCP tool surface
 
 ### Companion page
 
-- `get_stream_info`
-- `get_recent_events`
-- `search_stream`
-- `jump_to_event`
-- `create_watch_rule`
-- `search_livestreams`
-- `open_livestream_search`
+The universal surface includes `set_research_goal`, `ingest_youtube_video`, `import_browser_evidence`, `search_video_evidence`, `write_report`, evidence pinning, source management, report revision, timestamp navigation, and publication tools.
 
 ## Agent skill/plugin
 
@@ -75,9 +69,9 @@ Start a new Codex task after installation so the LiveSignal skill is loaded.
 1. Start the web app with `npm run dev`.
 2. In a compatible Chrome build, enable WebMCP.
 3. Open `chrome://extensions`, enable Developer mode, then load `extension/` as an unpacked extension.
-4. Open a YouTube or Twitch livestream. Open the LiveSignal popup and choose **Enable for this tab** once when native evidence is unavailable.
-5. Ask your agent: “Find a current livestream about Ethereum and tell me what it is discussing, with evidence.”
-6. Ask: “Monitor this stream for a release date.” Then use `get_recent_events` and `jump_to_event` when a matching line appears.
+4. Open the Companion and set any research goal.
+5. Import public YouTube URLs. If server captions are unavailable, open the source with the extension, expose its transcript or enable listening once, then choose **Import latest browser evidence** in the Companion.
+6. Ask the agent to search the timed evidence and write an editable report with source moments.
 
 ## Local development
 

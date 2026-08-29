@@ -1,6 +1,6 @@
 # LiveSignal browser adapter (prototype)
 
-This Manifest V3 extension makes supported livestream pages useful to agents without requiring Twitch or YouTube to change their websites. WebMCP is the primary interface; an ordinary DOM evidence snapshot lets a paired Codex browser agent read committed results when its automation world does not expose page-registered WebMCP tools.
+This Manifest V3 extension makes supported YouTube videos and livestreams useful to agents without requiring the platforms to change their websites. It can now transfer the latest native-caption or realtime-STT evidence into the LiveSignal Companion, where a human and agent create an editable report together.
 
 ## What works today
 
@@ -31,12 +31,14 @@ YouTube preroll and midroll speech is discarded in the background before it can 
 2. Go to `chrome://extensions`, enable Developer mode, and load this `extension/` directory unpacked.
 3. Open a YouTube or Twitch livestream. If YouTube has no transcript panel, open the LiveSignal popup and choose **Enable for this tab** once. Wait for the badge to say **LiveSignal listening**.
 4. Ask an agent: “What are they discussing right now? Use the recent transcript as evidence.”
-5. Ask: “Search this stream for Ethereum and show me the evidence.”
+5. Ask: “Search this video for manufacturing cost and show me the evidence.”
 6. Ask: “Monitor this transcript for a release date.” Then use `get_recent_events` to see any matching timestamped signal.
 
 ## Paired Codex browser mode
 
 The extension publishes a same-world API through `window.LiveSignalAgent.call(name, input)` and a read-only JSON `<output>` at `#livesignal-agent-state`. Codex browser control should read the DOM output because browser automation can run in an isolated JavaScript world. This is a compatibility layer, not a separate backend or evidence source.
+
+On `livesignal-chi.vercel.app`, `companion-bridge.js` imports the latest saved evidence snapshot when the page or agent calls `import_browser_evidence`.
 
 The intended flow is:
 

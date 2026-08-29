@@ -5,6 +5,7 @@ const TOKEN_ENDPOINT = "https://livesignal-chi.vercel.app/api/elevenlabs-token";
 const MAX_SEGMENTS = 300;
 
 const tabStates = new Map();
+let latestEvidenceSnapshot = null;
 
 const initialState = () => ({
   status: "idle",
@@ -15,7 +16,7 @@ const initialState = () => ({
   discardedAdSegments: 0,
   partial: "",
   segments: [],
-  error: null
+  error: null,
 });
 
 const stateFor = (tabId) => {
@@ -28,7 +29,7 @@ const sendState = async (tabId) => {
   try {
     await chrome.tabs.sendMessage(tabId, {
       type: "LIVESIGNAL_TRANSCRIPTION_STATE",
-      payload: state
+      payload: state,
     });
   } catch {
     // The supported page may still be loading its content script.
@@ -40,7 +41,8 @@ const ensureOffscreenDocument = async () => {
   await chrome.offscreen.createDocument({
     url: OFFSCREEN_DOCUMENT,
     reasons: ["USER_MEDIA"],
-    justification: "Capture user-approved tab audio for realtime livestream transcription."
+    justification:
+      "Capture user-approved tab audio for realtime livestream transcription.",
   });
 };
 
@@ -48,7 +50,7 @@ const stopTranscription = async (tabId) => {
   await chrome.runtime.sendMessage({
     target: "offscreen",
     type: "STOP_TRANSCRIPTION",
-    tabId
+    tabId,
   });
   const state = stateFor(tabId);
   state.status = "idle";
@@ -73,13 +75,15 @@ const startTranscription = async (tab) => {
 
   try {
     await ensureOffscreenDocument();
-    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+    const streamId = await chrome.tabCapture.getMediaStreamId({
+      targetTabId: tab.id,
+    });
     await chrome.runtime.sendMessage({
       target: "offscreen",
       type: "START_TRANSCRIPTION",
       tabId: tab.id,
       streamId,
-      tokenEndpoint: TOKEN_ENDPOINT
+      tokenEndpoint: TOKEN_ENDPOINT,
     });
   } catch (error) {
     state.status = "error";
@@ -108,15 +112,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message?.type === "LIVESIGNAL_EVIDENCE_SNAPSHOT" && message.snapshot) {
+    latestEvidenceSnapshot = {
+      ...message.snapshot,
+      sourceTabId: sender.tab?.id ?? null,
+      capturedAt: new Date().toISOString(),
+    };
+    void chrome.storage.local.set({ latestEvidenceSnapshot });
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (message?.type === "GET_LATEST_EVIDENCE_SNAPSHOT") {
+    if (latestEvidenceSnapshot) {
+      sendResponse(latestEvidenceSnapshot);
+      return false;
+    }
+    chrome.storage.local
+      .get("latestEvidenceSnapshot")
+      .then((stored) => sendResponse(stored.latestEvidenceSnapshot || null))
+      .catch(() => sendResponse(null));
+    return true;
+  }
+
   if (message?.type === "TOGGLE_TRANSCRIPTION" && message.tabId) {
-    chrome.tabs.get(message.tabId)
+    chrome.tabs
+      .get(message.tabId)
       .then((tab) => toggleTranscription(tab))
       .then(sendResponse)
-      .catch((error) => sendResponse({
-        ...initialState(),
-        status: "error",
-        error: String(error?.message || error)
-      }));
+      .catch((error) =>
+        sendResponse({
+          ...initialState(),
+          status: "error",
+          error: String(error?.message || error),
+        }),
+      );
     return true;
   }
 
@@ -125,14 +155,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!tabId) return false;
     const state = stateFor(tabId);
     const nextAdShowing = Boolean(message.adShowing);
-    if (state.adShowing && !nextAdShowing) state.adGraceUntil = Date.now() + 2000;
+    if (state.adShowing && !nextAdShowing)
+      state.adGraceUntil = Date.now() + 2000;
     state.adShowing = nextAdShowing;
     if (message.streamUrl) state.streamUrl = message.streamUrl;
     if (state.adShowing) state.partial = "";
     return false;
   }
 
-  if (message?.source !== "livesignal-offscreen" || !message.tabId) return false;
+  if (message?.source !== "livesignal-offscreen" || !message.tabId)
+    return false;
 
   const state = stateFor(message.tabId);
   if (message.type === "TRANSCRIPTION_STATUS") {
@@ -141,7 +173,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === "TRANSCRIPT_PARTIAL") {
     state.status = "listening";
-    state.partial = state.adShowing || Date.now() < state.adGraceUntil ? "" : message.text || "";
+    state.partial =
+      state.adShowing || Date.now() < state.adGraceUntil
+        ? ""
+        : message.text || "";
   }
   if (message.type === "TRANSCRIPT_COMMITTED" && message.segment?.text) {
     state.status = "listening";
@@ -172,7 +207,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (["connecting", "listening"].includes(stateFor(tabId).status)) {
-    void chrome.runtime.sendMessage({ target: "offscreen", type: "STOP_TRANSCRIPTION", tabId });
+    void chrome.runtime.sendMessage({
+      target: "offscreen",
+      type: "STOP_TRANSCRIPTION",
+      tabId,
+    });
   }
   tabStates.delete(tabId);
 });
