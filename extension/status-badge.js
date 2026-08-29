@@ -6,6 +6,7 @@
   badge.id = "livesignal-status-badge";
   badge.type = "button";
   let transcriptionState = { status: "idle", segments: [], partial: "", error: null };
+  let lastAdShowing = null;
   const renderStatus = () => {
     const webmcp = document.documentElement.dataset.livesignalWebmcp;
     const adapter = document.documentElement.dataset.livesignalAdapter;
@@ -82,5 +83,14 @@
     window.postMessage({ source: "livesignal", type: "live-transcription-state", payload: state }, location.origin);
     renderStatus();
   }).catch(() => {});
+  const reportPlaybackContext = () => {
+    const adShowing = Boolean(document.querySelector(".ad-showing"));
+    if (adShowing === lastAdShowing) return;
+    lastAdShowing = adShowing;
+    void chrome.runtime.sendMessage({ type: "LIVESIGNAL_PLAYBACK_CONTEXT", adShowing, streamUrl: location.href });
+  };
+  reportPlaybackContext();
+  const playbackTimer = window.setInterval(reportPlaybackContext, 500);
+  window.addEventListener("pagehide", () => window.clearInterval(playbackTimer), { once: true });
   document.documentElement.append(badge);
 })();

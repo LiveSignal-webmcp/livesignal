@@ -8,11 +8,14 @@
   const events = [];
   const seenMatches = new Set();
   const liveSegmentMap = new Map();
+  const ignoredLiveSegmentIds = new Set();
   let activeStreamKey = null;
   let liveTranscription = {
     status: "idle",
     provider: "ElevenLabs Scribe v2 Realtime",
     partial: "",
+    adShowing: false,
+    discardedAdSegments: 0,
     error: null
   };
 
@@ -107,6 +110,8 @@
         status: liveTranscription.status,
         provider: liveTranscription.provider,
         partial: liveTranscription.partial,
+        adShowing: liveTranscription.adShowing,
+        discardedAdSegments: liveTranscription.discardedAdSegments,
         segmentCount: liveSegmentMap.size,
         error: liveTranscription.error
       },
@@ -119,6 +124,7 @@
     if (nextStreamKey === activeStreamKey) return false;
     activeStreamKey = nextStreamKey;
     liveSegmentMap.clear();
+    ignoredLiveSegmentIds.clear();
     events.splice(0, events.length);
     seenMatches.clear();
     return true;
@@ -127,9 +133,18 @@
   const updateAgentSnapshot = (state) => {
     let snapshot = document.getElementById("livesignal-agent-state");
     if (!snapshot) {
-      snapshot = document.createElement("script");
+      snapshot = document.createElement("output");
       snapshot.id = "livesignal-agent-state";
-      snapshot.type = "application/json";
+      snapshot.setAttribute("aria-label", "LiveSignal agent evidence");
+      Object.assign(snapshot.style, {
+        position: "fixed",
+        left: "-10000px",
+        top: "0",
+        width: "1px",
+        height: "1px",
+        overflow: "hidden",
+        whiteSpace: "pre-wrap"
+      });
       document.documentElement.append(snapshot);
     }
     snapshot.textContent = JSON.stringify({
@@ -221,6 +236,51 @@
     return { ...seek(segment.seconds), event: { id: `transcript-event-${segment.id}`, timestamp: segment.timestamp, evidence: segment.text } };
   };
 
+  const rankLivestreamResults = ({ query = "", limit = 10 } = {}) => {
+    const pageQuery = new URL(location.href).searchParams.get("search_query") || "";
+    const requestedQuery = String(query || pageQuery).replace(/\blive\b/gi, " ").trim();
+    const topicTokens = requestedQuery.toLowerCase().split(/\s+/).filter((token) => token.length > 2);
+    const cards = Array.from(document.querySelectorAll("ytd-video-renderer"));
+    const results = cards.map((card) => {
+      const titleNode = card.querySelector("#video-title");
+      const title = titleNode?.textContent?.trim() || "";
+      const url = titleNode?.href || "";
+      const channel = card.querySelector("#channel-name")?.textContent?.trim().replace(/\s+/g, " ") || "";
+      const badges = Array.from(card.querySelectorAll("ytd-badge-supported-renderer, .badge-shape-wiz__text"))
+        .map((node) => node.textContent?.trim()).filter(Boolean);
+      const metadata = Array.from(card.querySelectorAll("#metadata-line span"))
+        .map((node) => node.textContent?.trim()).filter(Boolean);
+      const normalizedTitle = title.toLowerCase();
+      const matchedTokens = topicTokens.filter((token) => normalizedTitle.includes(token));
+      const isLive = badges.some((badge) => badge.toUpperCase().includes("LIVE"));
+      const automatedSignals = /24\/7|signal|scalping|heatmap|order book|\bm1\b|\bm5\b|monitor|no delay/i.test(title);
+      const commentarySignals = /analysis|news|update|discussion|market heading|live trading|breakout|prediction/i.test(title);
+      const exactTopicMatch = Boolean(requestedQuery) && normalizedTitle.includes(requestedQuery.toLowerCase());
+      const topicCoverage = topicTokens.length ? matchedTokens.length / topicTokens.length : 0;
+      const score = (isLive ? 4 : 0) + (exactTopicMatch ? 5 : topicCoverage * 4) + (commentarySignals ? 2 : 0) - (automatedSignals ? 3 : 0);
+      return {
+        title,
+        url,
+        channel,
+        badges,
+        metadata,
+        isLive,
+        topicMatch: exactTopicMatch ? "exact_title" : topicCoverage ? "partial_title" : "none",
+        likelyFormat: automatedSignals ? "automated_chart_or_signals" : commentarySignals ? "spoken_commentary_likely" : "unknown",
+        score: round(score)
+      };
+    })
+      .filter((result) => result.title && result.url && result.isLive)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.max(1, Math.min(Number(limit) || 10, 25)));
+    return {
+      query: requestedQuery,
+      pageUrl: location.href,
+      results,
+      guidance: "Open a high-topic-match result, then verify the actual spoken topic with get_transcript before answering. Titles and format labels are discovery signals, not transcript evidence."
+    };
+  };
+
   const getTranscript = ({ limit = 80 } = {}) => {
     const safeLimit = Math.max(1, Math.min(Number(limit) || 80, MAX_TRANSCRIPT_SEGMENTS));
     const segments = transcriptSegments();
@@ -242,6 +302,18 @@
   };
 
   const toolDefinitions = [
+    {
+      name: "rank_livestream_results",
+      description: "Ranks visible YouTube Live search results by topic match and likely spoken commentary. Use the ranking only for discovery, then verify the selected stream with transcript evidence.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Topic the user wants a livestream about." },
+          limit: { type: "number", description: "Maximum ranked live results to return (default 10, maximum 25)." }
+        }
+      },
+      execute: rankLivestreamResults
+    },
     {
       name: "get_current_stream_state",
       description: "Returns normalized player state for the active YouTube or Twitch page, including native transcript and realtime listening status.",
@@ -345,13 +417,21 @@
       status: payload.status || "idle",
       provider: payload.provider || "ElevenLabs Scribe v2 Realtime",
       partial: payload.partial || "",
+      adShowing: Boolean(payload.adShowing),
+      discardedAdSegments: Number(payload.discardedAdSegments) || 0,
       error: payload.error || null
     };
     document.documentElement.dataset.livesignalTranscription = liveTranscription.status;
 
     (payload.segments || []).forEach((segment) => {
+      if (!segment?.id || !segment.text) return;
+      if (liveTranscription.adShowing) {
+        ignoredLiveSegmentIds.add(segment.id);
+        return;
+      }
+      if (ignoredLiveSegmentIds.has(segment.id)) return;
       if (segment.streamUrl && streamKeyFor(segment.streamUrl) !== activeStreamKey) return;
-      if (!segment?.id || !segment.text || liveSegmentMap.has(segment.id)) return;
+      if (liveSegmentMap.has(segment.id)) return;
       const video = getVideo();
       const seconds = video && Number.isFinite(video.currentTime) ? round(video.currentTime) : null;
       liveSegmentMap.set(segment.id, {

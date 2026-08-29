@@ -20,7 +20,7 @@ type StreamSearch = { id: "youtube" | "twitch"; platform: string; title: string;
 
 const VERIFIED_REPLAY_URL = "https://www.youtube.com/watch?v=BREmL2qYfYM";
 const REPOSITORY_URL = "https://github.com/LiveSignal-webmcp/livesignal";
-const VERIFIED_TOOLS = ["get_current_stream_state", "get_transcript", "search_stream", "get_recent_events", "create_watch_rule", "get_active_watch_rules", "jump_to_timestamp", "jump_to_event"];
+const VERIFIED_TOOLS = ["rank_livestream_results", "get_current_stream_state", "get_transcript", "search_stream", "get_recent_events", "create_watch_rule", "get_active_watch_rules", "jump_to_timestamp", "jump_to_event"];
 
 function makeStreamSearches(query: string): StreamSearch[] {
   const topic = query.trim() || "live streams";
@@ -154,8 +154,8 @@ export default function Home() {
           <div className="proof-card-top"><span>TEST RESULT</span><b>PASS</b></div>
           <h3>CRYPTO LIVE — THE ETHEREUM BREAKOUT</h3>
           <p className="proof-source">YouTube live replay · tested August 28, 2026</p>
-          <div className="proof-stats"><span><strong>8</strong>tools registered</span><span><strong>393</strong>transcript segments</span><span><strong>0:09</strong>first Ethereum match</span></div>
-          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href="/livesignal-extension-v0.4.0.zip" download>Download extension</a><a className="text-button" href={`${REPOSITORY_URL}/tree/main/plugins/livesignal`} target="_blank" rel="noreferrer">Agent plugin</a></div>
+          <div className="proof-stats"><span><strong>9</strong>tools registered</span><span><strong>393</strong>transcript segments</span><span><strong>0:09</strong>first Ethereum match</span></div>
+          <div className="proof-actions"><a className="primary-button" href={VERIFIED_REPLAY_URL} target="_blank" rel="noreferrer">Open tested replay <span>↗</span></a><a className="text-button" href="/livesignal-extension-v0.4.1.zip" download>Download extension</a><a className="text-button" href={`${REPOSITORY_URL}/tree/main/plugins/livesignal`} target="_blank" rel="noreferrer">Agent plugin</a></div>
         </article>
         <article className="proof-card proof-output">
           <div className="proof-card-top"><span>AGENT EVIDENCE</span><b>search_stream</b></div>

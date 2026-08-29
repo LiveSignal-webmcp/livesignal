@@ -23,7 +23,7 @@ test("server-renders the verified LiveSignal adapter proof with accurate framing
   assert.match(html, /Live video, <em>without<\/em>/);
   assert.match(html, /VERIFIED REAL-STREAM TEST/);
   assert.match(html, /393<\/strong>transcript segments/);
-  assert.match(html, /8<\/strong>tools registered/);
+  assert.match(html, /9<\/strong>tools registered/);
   assert.match(html, /youtube\.com\/watch\?v=BREmL2qYfYM/);
   assert.match(html, /STREAM DISCOVERY/);
   assert.match(html, /PAIRED AGENT MODE/);

@@ -1,6 +1,6 @@
 # LiveSignal browser adapter (prototype)
 
-This Manifest V3 extension makes supported livestream pages useful to agents without requiring Twitch or YouTube to change their websites. WebMCP is the primary interface; a page bridge lets a paired Codex browser agent use the identical tool contract when its browser runtime does not expose page-registered WebMCP tools yet.
+This Manifest V3 extension makes supported livestream pages useful to agents without requiring Twitch or YouTube to change their websites. WebMCP is the primary interface; an ordinary DOM evidence snapshot lets a paired Codex browser agent read committed results when its automation world does not expose page-registered WebMCP tools.
 
 ## What works today
 
@@ -11,8 +11,11 @@ LiveSignal prefers transcript text that YouTube makes visible in its own transcr
 
 Evidence is reset whenever the approved tab switches streams. Transcript lines from one source are never reused for the next source.
 
+YouTube preroll and midroll speech is discarded in the background before it can become stream evidence. A short grace period also drops an ad's trailing VAD commit.
+
 ## WebMCP tools
 
+- `rank_livestream_results`
 - `get_current_stream_state`
 - `get_transcript`
 - `search_stream`
@@ -33,14 +36,14 @@ Evidence is reset whenever the approved tab switches streams. Transcript lines f
 
 ## Paired Codex browser mode
 
-The extension publishes the same eight handlers through `window.LiveSignalAgent.call(name, input)` and a read-only JSON snapshot at `#livesignal-agent-state`. This is a compatibility layer for browser-control runtimes; it is not a separate backend or evidence source.
+The extension publishes a same-world API through `window.LiveSignalAgent.call(name, input)` and a read-only JSON `<output>` at `#livesignal-agent-state`. Codex browser control should read the DOM output because browser automation can run in an isolated JavaScript world. This is a compatibility layer, not a separate backend or evidence source.
 
 The intended flow is:
 
 1. A person chooses **Enable for this tab** once.
 2. Codex searches and navigates in that same tab.
-3. Codex prefers WebMCP tools. If its browser runtime cannot discover them, it calls the matching page-bridge handler.
-4. LiveSignal returns transcript evidence and timestamps; Codex answers from that evidence.
+3. Codex prefers WebMCP tools. If its browser runtime cannot discover them, it reads the committed evidence snapshot and uses browser control for navigation.
+4. LiveSignal returns transcript evidence and timestamps; Codex verifies the spoken topic before answering.
 
 Realtime transcription requires the deployed LiveSignal Companion to have an `ELEVENLABS_API_KEY` server environment variable. The key is never bundled with the extension: the Companion mints a single-use Scribe token for each listening session.
 

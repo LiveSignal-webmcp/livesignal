@@ -10,6 +10,9 @@ const initialState = () => ({
   status: "idle",
   provider: "ElevenLabs Scribe v2 Realtime",
   streamUrl: null,
+  adShowing: false,
+  adGraceUntil: 0,
+  discardedAdSegments: 0,
   partial: "",
   segments: [],
   error: null
@@ -60,6 +63,9 @@ const startTranscription = async (tab) => {
   const state = stateFor(tab.id);
   state.status = "connecting";
   state.streamUrl = tab.url || state.streamUrl;
+  state.adShowing = false;
+  state.adGraceUntil = 0;
+  state.discardedAdSegments = 0;
   state.segments = [];
   state.partial = "";
   state.error = null;
@@ -114,6 +120,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "LIVESIGNAL_PLAYBACK_CONTEXT") {
+    const tabId = sender.tab?.id;
+    if (!tabId) return false;
+    const state = stateFor(tabId);
+    const nextAdShowing = Boolean(message.adShowing);
+    if (state.adShowing && !nextAdShowing) state.adGraceUntil = Date.now() + 2000;
+    state.adShowing = nextAdShowing;
+    if (message.streamUrl) state.streamUrl = message.streamUrl;
+    if (state.adShowing) state.partial = "";
+    return false;
+  }
+
   if (message?.source !== "livesignal-offscreen" || !message.tabId) return false;
 
   const state = stateFor(message.tabId);
@@ -123,12 +141,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.type === "TRANSCRIPT_PARTIAL") {
     state.status = "listening";
-    state.partial = message.text || "";
+    state.partial = state.adShowing || Date.now() < state.adGraceUntil ? "" : message.text || "";
   }
   if (message.type === "TRANSCRIPT_COMMITTED" && message.segment?.text) {
     state.status = "listening";
     state.partial = "";
-    state.segments.push({ ...message.segment, streamUrl: state.streamUrl });
+    if (state.adShowing || Date.now() < state.adGraceUntil) {
+      state.discardedAdSegments += 1;
+    } else {
+      state.segments.push({ ...message.segment, streamUrl: state.streamUrl });
+    }
     state.segments = state.segments.slice(-MAX_SEGMENTS);
   }
   void sendState(message.tabId);
@@ -140,6 +162,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const state = stateFor(tabId);
   if (state.streamUrl === changeInfo.url) return;
   state.streamUrl = changeInfo.url || tab.url || null;
+  state.adShowing = false;
+  state.adGraceUntil = 0;
+  state.discardedAdSegments = 0;
   state.partial = "";
   state.segments = [];
   void sendState(tabId);

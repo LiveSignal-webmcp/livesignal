@@ -25,12 +25,13 @@ The Companion timeline is explicitly seeded demo data. It is used to make the pr
 - **YouTube:** normalized player state, native transcript retrieval, realtime tab-audio transcription, transcript search, watch rules, and timestamp navigation.
 - **Twitch:** normalized player state, realtime tab-audio transcription, transcript search, and timestamp navigation where the player provides a playback window.
 - One explicit tab-audio approval, followed by autonomous agent navigation in the same tab.
-- A paired Codex browser-control bridge using the same handlers as WebMCP.
+- A paired Codex browser-control evidence snapshot backed by the same transcript state as WebMCP.
 - Stream-scoped evidence isolation so transcript lines do not leak across navigation.
+- YouTube ad filtering so preroll and midroll speech never becomes stream evidence.
 
 LiveSignal prefers native YouTube transcript text. When none is available, it uses ElevenLabs Scribe v2 Realtime after the user approves tab audio once. It does not claim visual scene understanding or persistent background monitoring after capture ends.
 
-The latest unpacked demo bundle is available from the hosted site as `livesignal-extension-v0.4.0.zip`.
+The latest unpacked demo bundle is available from the hosted site as `livesignal-extension-v0.4.1.zip`.
 
 ## WebMCP tool surface
 
@@ -40,10 +41,13 @@ The latest unpacked demo bundle is available from the hosted site as `livesignal
 - `get_recent_events`
 - `search_stream`
 - `jump_to_event`
+- `create_watch_rule`
+- `search_livestreams`
+- `open_livestream_search`
 
 ## Agent skill/plugin
 
-`plugins/livesignal/` contains an installable Codex plugin with the LiveSignal skill. It pairs browser control with the extension: the browser agent discovers and navigates streams; LiveSignal supplies transcript evidence, search, events, and player actions. WebMCP remains the native path, with `window.LiveSignalAgent` as a compatibility bridge for browser runtimes that cannot surface page-registered tools yet.
+`plugins/livesignal/` contains an installable Codex plugin with the LiveSignal skill. It pairs browser control with the extension: the browser agent discovers and navigates streams; LiveSignal supplies ranked discovery signals, transcript evidence, search, events, and player actions. WebMCP remains the native path, with `#livesignal-agent-state` as the browser-control evidence path when page-registered tools are not surfaced.
 
 Install the public plugin marketplace and plugin:
 
@@ -53,13 +57,11 @@ codex plugin add livesignal@livesignal-webmcp
 ```
 
 Start a new Codex task after installation so the LiveSignal skill is loaded.
-- `create_watch_rule`
-- `search_livestreams`
-- `open_livestream_search`
 
 ### Browser adapter
 
 - `get_current_stream_state`
+- `rank_livestream_results`
 - `get_transcript`
 - `search_stream`
 - `get_recent_events`
@@ -93,7 +95,7 @@ npm run build
 ## Design choices and limits
 
 - **One consent boundary:** Chrome requires a user gesture for tab audio capture; after that, the paired agent controls search and navigation in the approved tab.
-- **One evidence contract:** WebMCP and the browser-control bridge call the same eight handlers.
+- **One evidence state:** WebMCP and the browser-control snapshot read the same committed transcript store.
 - **No invented data:** a missing transcript is reported as missing, with guidance to open YouTube's transcript panel.
 - **No false background-monitoring claim:** watch rules are intentionally in-page and scoped to the current browser tab.
 - **Platform compatibility:** the extension is a prototype and is not affiliated with YouTube or Twitch. Platform DOM changes may require adapter updates.
