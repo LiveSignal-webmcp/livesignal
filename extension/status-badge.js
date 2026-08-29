@@ -47,7 +47,7 @@
       return;
     }
     badge.textContent = "● LiveSignal active";
-    badge.title = "LiveSignal can share stream evidence with WebMCP. Click the LiveSignal toolbar icon to start realtime listening.";
+    badge.title = "LiveSignal can share stream evidence with WebMCP. Approve listening once for this tab, then agents can use it autonomously.";
   };
   renderStatus();
   Object.assign(badge.style, {

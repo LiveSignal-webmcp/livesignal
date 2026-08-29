@@ -12,7 +12,7 @@ const describe = (state) => {
     return state.partial ? `Hearing: ${state.partial}` : `Listening · ${count} committed segment${count === 1 ? "" : "s"}`;
   }
   if (state.status === "error") return state.error || "Realtime transcription failed.";
-  return "Ready to capture this tab’s audio.";
+  return "Ready for one-time audio approval on this tab.";
 };
 
 const render = (state) => {
@@ -20,7 +20,7 @@ const render = (state) => {
   statusElement.textContent = describe(state);
   toggleButton.textContent = ["connecting", "listening"].includes(state.status)
     ? "Stop listening"
-    : state.status === "error" ? "Retry listening" : "Start listening";
+    : state.status === "error" ? "Retry listening" : "Enable for this tab";
   toggleButton.disabled = !activeTabId;
 };
 

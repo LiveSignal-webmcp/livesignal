@@ -70,7 +70,7 @@
           : "Transcript evidence is available from the YouTube transcript panel."
         : liveTranscription.status === "listening"
           ? "LiveSignal is listening; wait for the first committed speech segment."
-          : "Open YouTube's transcript panel, or click the LiveSignal toolbar icon once to start realtime listening."
+          : "Open YouTube's transcript panel, or approve LiveSignal listening once for this tab. After approval, realtime evidence remains available across stream navigation in this tab."
     };
   };
 

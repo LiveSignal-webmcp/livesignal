@@ -7,7 +7,7 @@ This Manifest V3 extension makes supported livestream pages useful to WebMCP-ena
 - **YouTube**: player state, visible transcript evidence, realtime tab-audio transcription, transcript search, timestamp seek, and in-tab transcript watch rules.
 - **Twitch**: normalized player state, realtime tab-audio transcription, and timestamp seek when the player exposes a seekable playback window.
 
-LiveSignal prefers transcript text that YouTube makes visible in its own transcript panel. When a true livestream does not expose one, click the LiveSignal toolbar icon once to start ElevenLabs Scribe v2 Realtime transcription of that tab's audio. Click it again to stop. Watch rules are local to the current tab and disappear when the tab is refreshed; this prototype does not claim visual scene understanding.
+LiveSignal prefers transcript text that YouTube makes visible in its own transcript panel. When a true livestream does not expose one, approve the tab once in the LiveSignal popup to start ElevenLabs Scribe v2 Realtime transcription. Chrome requires that initial user gesture for tab audio. After it, the agent can use LiveSignal autonomously across streams opened in the same tab until listening is stopped or the tab closes. Watch rules are page-local; this prototype does not claim visual scene understanding.
 
 ## WebMCP tools
 
@@ -24,7 +24,7 @@ LiveSignal prefers transcript text that YouTube makes visible in its own transcr
 
 1. Enable WebMCP in a compatible Chrome build.
 2. Go to `chrome://extensions`, enable Developer mode, and load this `extension/` directory unpacked.
-3. Open a YouTube or Twitch livestream. If YouTube has no transcript panel, click the LiveSignal toolbar icon once and wait for the badge to say **LiveSignal listening**.
+3. Open a YouTube or Twitch livestream. If YouTube has no transcript panel, open the LiveSignal popup and choose **Enable for this tab** once. Wait for the badge to say **LiveSignal listening**.
 4. Ask an agent: “What are they discussing right now? Use the recent transcript as evidence.”
 5. Ask: “Search this stream for Ethereum and show me the evidence.”
 6. Ask: “Monitor this transcript for a release date.” Then use `get_recent_events` to see any matching timestamped signal.
