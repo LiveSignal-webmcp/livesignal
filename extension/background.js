@@ -54,9 +54,7 @@ const stopTranscription = async (tabId) => {
 };
 
 const startTranscription = async (tab) => {
-  if (!tab.id || !/^https:\/\/(www\.)?(youtube\.com|twitch\.tv)\//.test(tab.url || "")) {
-    return;
-  }
+  if (!tab.id) return;
 
   const state = stateFor(tab.id);
   state.status = "connecting";
