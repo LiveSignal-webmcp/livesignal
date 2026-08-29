@@ -2,10 +2,10 @@
   "manifest_version": 3,
   "name": "LiveSignal",
   "short_name": "LiveSignal",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Give agents structured access to livestream players and realtime speech evidence.",
   "minimum_chrome_version": "149",
-  "permissions": ["offscreen", "storage", "tabCapture"],
+  "permissions": ["activeTab", "offscreen", "storage", "tabCapture"],
   "host_permissions": [
     "https://livesignal-chi.vercel.app/*",
     "http://localhost:3000/*"
