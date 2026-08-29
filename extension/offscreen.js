@@ -18,22 +18,6 @@ const bytesToBase64 = (bytes) => {
   return btoa(binary);
 };
 
-const resampleToPcm16 = (input, inputRate, outputRate = 16000) => {
-  if (!input.length) return new Uint8Array();
-  const ratio = inputRate / outputRate;
-  const outputLength = Math.max(1, Math.floor(input.length / ratio));
-  const output = new Int16Array(outputLength);
-  for (let outputIndex = 0; outputIndex < outputLength; outputIndex += 1) {
-    const start = Math.floor(outputIndex * ratio);
-    const end = Math.min(input.length, Math.floor((outputIndex + 1) * ratio));
-    let sum = 0;
-    for (let inputIndex = start; inputIndex < end; inputIndex += 1) sum += input[inputIndex];
-    const sample = Math.max(-1, Math.min(1, sum / Math.max(1, end - start)));
-    output[outputIndex] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-  }
-  return new Uint8Array(output.buffer);
-};
-
 const closeSession = async () => {
   const session = activeSession;
   activeSession = null;
@@ -50,6 +34,7 @@ const closeSession = async () => {
   } catch {
     // Connection teardown is best effort.
   }
+  session.processor?.port?.close();
   session.processor?.disconnect();
   session.silentGain?.disconnect();
   session.source?.disconnect();
@@ -91,8 +76,9 @@ const startSession = async ({ tabId, streamId, tokenEndpoint }) => {
 
     const socket = new WebSocket(socketUrl);
     const audioContext = new AudioContext();
+    await audioContext.audioWorklet.addModule(chrome.runtime.getURL("audio-processor.js"));
     const source = audioContext.createMediaStreamSource(stream);
-    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    const processor = new AudioWorkletNode(audioContext, "livesignal-pcm-processor");
     const silentGain = audioContext.createGain();
     silentGain.gain.value = 0;
 
@@ -104,9 +90,9 @@ const startSession = async ({ tabId, streamId, tokenEndpoint }) => {
 
     activeSession = { tabId, socket, stream, audioContext, source, processor, silentGain };
 
-    processor.onaudioprocess = (event) => {
+    processor.port.onmessage = (event) => {
       if (socket.readyState !== WebSocket.OPEN) return;
-      const pcm = resampleToPcm16(event.inputBuffer.getChannelData(0), audioContext.sampleRate);
+      const pcm = new Uint8Array(event.data);
       if (!pcm.length) return;
       socket.send(JSON.stringify({
         message_type: "input_audio_chunk",
