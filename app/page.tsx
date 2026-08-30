@@ -2075,10 +2075,24 @@ export default function Home() {
     bridge.dataset.toolCount = String(toolHandlers.size);
     if (!existingBridge) document.body.appendChild(bridge);
 
-    const onBridgeCall = async () => {
+    const requestControlId = "livesignal-page-agent-request";
+    const existingRequestControl = document.getElementById(
+      requestControlId,
+    ) as HTMLTextAreaElement | null;
+    const requestControl =
+      existingRequestControl ?? document.createElement("textarea");
+    requestControl.id = requestControlId;
+    requestControl.setAttribute("aria-label", "LiveSignal page agent request");
+    requestControl.setAttribute("aria-hidden", "true");
+    requestControl.tabIndex = -1;
+    requestControl.style.cssText =
+      "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:.01;overflow:hidden;padding:0;border:0;z-index:-1";
+    if (!existingRequestControl) document.body.appendChild(requestControl);
+
+    const onBridgeCall = async (rawRequest?: string) => {
       let request: Record<string, unknown> = {};
       try {
-        request = JSON.parse(bridge.dataset.request ?? "{}");
+        request = JSON.parse(rawRequest ?? bridge.dataset.request ?? "{}");
         const requestId = String(request.requestId ?? "");
         const name = String(request.name ?? "");
         const execute = toolHandlers.get(name);
@@ -2099,7 +2113,10 @@ export default function Home() {
       }
       window.dispatchEvent(new Event("livesignal:page-tool-result"));
     };
-    window.addEventListener("livesignal:page-tool-call", onBridgeCall);
+    const onBridgeEvent = () => void onBridgeCall();
+    const onRequestInput = () => void onBridgeCall(requestControl.value);
+    window.addEventListener("livesignal:page-tool-call", onBridgeEvent);
+    requestControl.addEventListener("input", onRequestInput);
     document.documentElement.dataset.livesignalPageAgent = "ready";
 
     if (shouldRegisterWebMcp) {
@@ -2111,8 +2128,10 @@ export default function Home() {
     }
 
     return () => {
-      window.removeEventListener("livesignal:page-tool-call", onBridgeCall);
+      window.removeEventListener("livesignal:page-tool-call", onBridgeEvent);
+      requestControl.removeEventListener("input", onRequestInput);
       if (!existingBridge) bridge.remove();
+      if (!existingRequestControl) requestControl.remove();
       delete document.documentElement.dataset.livesignalPageAgent;
     };
     // Tool handlers use the live ref so calls always read current visible state.
