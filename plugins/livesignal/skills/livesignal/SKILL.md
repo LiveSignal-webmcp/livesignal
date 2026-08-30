@@ -1,6 +1,6 @@
 ---
 name: livesignal
-description: Research any topic across YouTube with timestamped evidence, then create and revise a shared report in LiveSignal through WebMCP. Use for video discovery, transcript research, cited summaries, editable reports, livestream evidence, or source-moment navigation.
+description: Research any topic across YouTube with timestamped evidence, then create, collaboratively revise, and download a shared report in LiveSignal through WebMCP. Use for video discovery, transcript research, cited summaries, editable reports, human-agent revision workflows, livestream evidence, report export, or source-moment navigation.
 ---
 
 # LiveSignal
@@ -15,7 +15,9 @@ Use LiveSignal as a shared video research desk operated primarily through its We
 4. If ChatGPT reads captions or source moments in another browser tab, call `record_video_evidence` on LiveSignal with the source metadata and timestamped excerpts. This is the primary cross-tab path in ChatGPT's built-in browser.
 5. The optional Chrome extension is a fallback for native-caption capture or one-time user-approved realtime STT. Import its latest snapshot from the page's manual fallback control when needed.
 6. Search the imported evidence, keep timestamped excerpts, and use `write_report` to draft the visible artifact. The human can edit the same report directly.
-7. Revise only as requested, preserve citations and caveats, and call `publish_report` only after the human approves the result.
+7. During an active collaboration, call `get_human_revisions` before a major research step and before presenting the report as final. Incorporate relevant edits with the brief or report tools, then call `acknowledge_human_revisions`. Do not claim an idle agent will wake itself; the revision stream is available in the active browser session.
+8. Revise only as requested, preserve citations and caveats, and call `publish_report` only after the human approves the result.
+9. When the human asks to save or export the result, call `download_report`. The Markdown download must retain clickable YouTube timestamp citations.
 
 ## Livestream adapter workflow
 

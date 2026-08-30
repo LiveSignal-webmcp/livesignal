@@ -36,8 +36,12 @@ test("server-renders a clean universal video research workspace", async () => {
   assert.match(html, /Agent result JSON/);
   assert.match(html, /Apply agent result/);
   assert.match(html, /Research brief/);
+  assert.match(html, /Live shared brief/i);
+  assert.match(html, /Research request/);
+  assert.match(html, /Human → agent/i);
   assert.match(html, /Source &amp; evidence desk/);
   assert.match(html, /Editable report/);
+  assert.match(html, /Download \.md/i);
   assert.match(html, /Waiting for ChatGPT/i);
   assert.match(html, /Your report starts here/i);
   assert.doesNotMatch(html, /Dan dan noodles/);

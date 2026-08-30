@@ -441,6 +441,34 @@ a {
   border-left: 1px solid #4e504a;
   padding-left: 18px;
 }
+.collaboration-status {
+  margin: 0 0 9px;
+  padding: 7px 9px;
+  border: 1px solid #4e504a;
+  background: #252723;
+}
+.collaboration-status b,
+.collaboration-status span {
+  display: block;
+}
+.collaboration-status b {
+  color: #8f918a;
+  font: 500 7px "DM Mono", monospace;
+  letter-spacing: 0.7px;
+}
+.collaboration-status span {
+  margin-top: 3px;
+  color: #b8bab2;
+  font-size: 8px;
+}
+.collaboration-status.pending {
+  border-color: #975349;
+  box-shadow: inset 3px 0 0 var(--red);
+}
+.collaboration-status.pending b,
+.collaboration-status.pending span {
+  color: #f1a092;
+}
 .agent-ledger p {
   margin: 0 0 7px;
 }
@@ -538,6 +566,34 @@ a {
     serif;
   max-width: 330px;
   margin: 28px 0 30px;
+}
+.brief-collaboration-note {
+  margin: -10px 0 20px;
+  padding: 11px 13px;
+  border-left: 3px solid var(--green);
+  background: rgba(255, 255, 255, 0.52);
+}
+.brief-collaboration-note span {
+  color: var(--green);
+  font: 700 8px "DM Mono", monospace;
+  letter-spacing: 0.7px;
+}
+.brief-collaboration-note p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.brief-live-editor {
+  border-bottom: 1px solid var(--line);
+}
+.brief-live-editor .brief-field:first-child {
+  border-top-color: var(--ink);
+}
+.brief-live-editor .research-request-field textarea {
+  min-height: 104px;
+  background: #fffdf7;
+  font: 600 15px/1.35 Fraunces, serif;
 }
 .brief-field {
   display: block;
@@ -1172,6 +1228,14 @@ a {
 }
 .guide-actions .publish {
   background: var(--red);
+}
+.guide-actions .download {
+  background: transparent;
+  color: #f7f2e8;
+}
+.guide-actions .download:hover {
+  border-color: #d6df9c;
+  color: #d6df9c;
 }
 .guide-actions .published {
   background: var(--green);

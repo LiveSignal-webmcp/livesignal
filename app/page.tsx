@@ -62,6 +62,14 @@ type AgentEvent = {
   detail: string;
 };
 
+type HumanRevision = {
+  id: string;
+  field: string;
+  detail: string;
+  createdAt: string;
+  acknowledged: boolean;
+};
+
 type ModelDocument = Document & {
   modelContext?: {
     registerTool: (tool: {
@@ -85,7 +93,7 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 16;
+const TOOL_COUNT = 19;
 const PHASES: Array<{ id: RunPhase; label: string }> = [
   { id: "discovering", label: "Discover" },
   { id: "extracting", label: "Extract" },
@@ -147,6 +155,7 @@ export default function Home() {
   const [activity, setActivity] = useState("Workspace ready for a new topic");
   const [runPhase, setRunPhase] = useState<RunPhase>("ready");
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+  const [humanRevisions, setHumanRevisions] = useState<HumanRevision[]>([]);
   const [published, setPublished] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [ingestStatus, setIngestStatus] = useState<
@@ -172,6 +181,10 @@ export default function Home() {
         : evidence
     ).slice(0, 18);
   }, [evidence, evidenceQuery]);
+  const pendingHumanRevisions = useMemo(
+    () => humanRevisions.filter((revision) => !revision.acknowledged),
+    [humanRevisions],
+  );
 
   const live = useRef({
     goal,
@@ -185,6 +198,7 @@ export default function Home() {
     published,
     runPhase,
     agentEvents,
+    humanRevisions,
   });
 
   useEffect(() => {
@@ -200,6 +214,7 @@ export default function Home() {
       published,
       runPhase,
       agentEvents,
+      humanRevisions,
     };
   }, [
     goal,
@@ -213,6 +228,7 @@ export default function Home() {
     published,
     runPhase,
     agentEvents,
+    humanRevisions,
   ]);
 
   function addAgentEvent(label: string, detail: string) {
@@ -220,6 +236,106 @@ export default function Home() {
       ...current.slice(-5),
       { id: crypto.randomUUID(), label, detail },
     ]);
+  }
+
+  function recordHumanRevision(field: string, detail: string) {
+    const now = new Date().toISOString();
+    const revisionId = crypto.randomUUID();
+    setHumanRevisions((current) => {
+      const pending = current.find(
+        (revision) => revision.field === field && !revision.acknowledged,
+      );
+      if (pending) {
+        return current.map((revision) =>
+          revision.id === pending.id
+            ? { ...revision, detail, createdAt: now }
+            : revision,
+        );
+      }
+      return [
+        ...current.slice(-11),
+        {
+          id: revisionId,
+          field,
+          detail,
+          createdAt: now,
+          acknowledged: false,
+        },
+      ];
+    });
+    setPublished(false);
+    setActivity(`Human changed ${field} · ready for agent`);
+    window.dispatchEvent(
+      new CustomEvent("livesignal:human-revision", {
+        detail: { field, value: detail, createdAt: now },
+      }),
+    );
+  }
+
+  function reportMarkdown() {
+    const state = live.current;
+    const lines = [
+      `# ${state.reportTitle}`,
+      "",
+      state.reportOverview,
+      "",
+      "## Research brief",
+      "",
+      `**Request:** ${state.goal}`,
+      "",
+      `**Must cover:** ${state.brief.mustCover || "Not specified"}`,
+      "",
+      `**Constraints:** ${state.brief.constraints || "None"}`,
+      "",
+      `**Deliverable:** ${state.brief.outputFormat}`,
+      "",
+    ];
+    state.reportSections.forEach((section) => {
+      lines.push(`## ${section.heading}`, "", section.body, "");
+      const citations = section.evidenceIds
+        .map((id) => state.evidence.find((item) => item.id === id))
+        .filter(Boolean) as EvidenceItem[];
+      if (citations.length) {
+        lines.push("### Source evidence", "");
+        citations.forEach((item) => {
+          const source = state.sources.find(
+            (entry) => entry.id === item.sourceId,
+          );
+          if (!source) return;
+          lines.push(
+            `- [${item.timestamp} · ${source.creator} — ${source.title}](${timestampUrl(source, item.seconds)})`,
+            `  > ${item.text}`,
+          );
+        });
+        lines.push("");
+      }
+    });
+    lines.push(
+      "---",
+      "",
+      `Created with LiveSignal from ${state.sources.length} video sources and ${state.evidence.length} timestamped evidence moments.`,
+    );
+    return lines.join("\n");
+  }
+
+  function downloadReport() {
+    const markdown = reportMarkdown();
+    const slug =
+      live.current.reportTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "") || "livesignal-report";
+    const filename = `${slug}.md`;
+    const url = URL.createObjectURL(
+      new Blob([markdown], { type: "text/markdown;charset=utf-8" }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setActivity("Citation-preserving report downloaded");
+    return { ok: true, filename, markdown };
   }
 
   function startResearch(nextGoal = goal) {
@@ -235,6 +351,7 @@ export default function Home() {
     setReportTitle("Untitled research report");
     setReportOverview("");
     setReportSections([]);
+    setHumanRevisions([]);
     setPublished(false);
     setIngestError("");
     setRunPhase("discovering");
@@ -265,6 +382,7 @@ export default function Home() {
       "A source-backed shortlist for a traveller who loves spicy noodles and everyday street food.",
     );
     setReportSections(example.sections);
+    setHumanRevisions([]);
     setPublished(false);
     setIngestError("");
     setRunPhase("review");
@@ -625,6 +743,7 @@ export default function Home() {
       setReportTitle(String(reportInput.title ?? "Agent research report"));
       setReportOverview(String(reportInput.overview ?? ""));
       setReportSections(sections);
+      setHumanRevisions([]);
       setPublished(false);
       setRunPhase("review");
       setAgentResultError("");
@@ -715,6 +834,53 @@ export default function Home() {
       "get_workspace_state",
       "Returns the current visible research brief, sources, timestamped evidence, editable report, and publication status.",
       () => live.current,
+    );
+    tool(
+      "get_human_revisions",
+      "Returns human edits made to the live brief or report that the agent has not yet acknowledged. Use while collaborating before revising the report.",
+      () => ({
+        revisions: live.current.humanRevisions.filter(
+          (revision) => !revision.acknowledged,
+        ),
+        currentBrief: live.current.brief,
+        currentReport: {
+          title: live.current.reportTitle,
+          overview: live.current.reportOverview,
+          sections: live.current.reportSections,
+        },
+      }),
+    );
+    tool(
+      "acknowledge_human_revisions",
+      "Marks human edits as seen after the agent has incorporated or responded to them.",
+      (input) => {
+        const requestedIds = Array.isArray(input.revisionIds)
+          ? input.revisionIds.map(String)
+          : [];
+        const acknowledgeAll = Boolean(input.all) || requestedIds.length === 0;
+        setHumanRevisions((current) =>
+          current.map((revision) =>
+            acknowledgeAll || requestedIds.includes(revision.id)
+              ? { ...revision, acknowledged: true }
+              : revision,
+          ),
+        );
+        addAgentEvent(
+          "Human edits acknowledged",
+          acknowledgeAll
+            ? "Agent read the latest shared draft"
+            : `${requestedIds.length} revisions read`,
+        );
+        setActivity("Agent caught up with human edits");
+        return { ok: true, acknowledged: acknowledgeAll ? "all" : requestedIds };
+      },
+      {
+        type: "object",
+        properties: {
+          all: { type: "boolean" },
+          revisionIds: { type: "array", items: { type: "string" } },
+        },
+      },
     );
     tool(
       "begin_research",
@@ -1104,6 +1270,11 @@ export default function Home() {
         };
       },
     );
+    tool(
+      "download_report",
+      "Downloads the current human-reviewed report as Markdown with clickable timestamp citations.",
+      () => downloadReport(),
+    );
     Promise.all(jobs)
       .then(() => setMcp("registered"))
       .catch(() => setMcp("error"));
@@ -1242,6 +1413,18 @@ export default function Home() {
             })}
           </div>
           <div className="agent-ledger">
+            <div
+              className={`collaboration-status ${
+                pendingHumanRevisions.length ? "pending" : "caught-up"
+              }`}
+            >
+              <b>HUMAN → AGENT</b>
+              <span>
+                {pendingHumanRevisions.length
+                  ? `${pendingHumanRevisions.length} live change${pendingHumanRevisions.length === 1 ? "" : "s"} waiting for ChatGPT`
+                  : "Shared draft caught up"}
+              </span>
+            </div>
             {agentEvents.length ? (
               agentEvents.slice(-3).map((event) => (
                 <p key={event.id}>
@@ -1270,69 +1453,75 @@ export default function Home() {
             />
             <h3>
               {goal
-                ? "The agent translated your request."
+                ? "Shape the brief with the agent."
                 : "One prompt becomes the brief."}
             </h3>
-            <div className="brief-output">
-              <span>Research request</span>
-              <p>{goal || "Waiting for ChatGPT to begin a project…"}</p>
-            </div>
-            <div className="brief-output">
-              <span>Must cover</span>
+            <div className="brief-collaboration-note">
+              <span>LIVE SHARED BRIEF</span>
               <p>
-                {brief.mustCover ||
-                  "ChatGPT will infer this from your request."}
+                Edit any field. The current value and its revision become
+                available to the active agent immediately.
               </p>
             </div>
-            <div className="brief-output">
-              <span>Constraints</span>
-              <p>{brief.constraints || "No special constraints yet."}</p>
-            </div>
-            <div className="brief-output">
-              <span>Deliverable</span>
-              <p>{brief.outputFormat}</p>
-            </div>
-            <details className="brief-editor">
-              <summary>Fine-tune brief (optional)</summary>
+            <div className="brief-live-editor">
+              <label className="brief-field research-request-field">
+                <span>Research request</span>
+                <textarea
+                  value={goal}
+                  onChange={(event) => {
+                    setGoal(event.target.value);
+                    setSearchQuery(event.target.value);
+                    recordHumanRevision("research request", event.target.value);
+                  }}
+                  placeholder="Waiting for ChatGPT to begin a project…"
+                  aria-label="Research request"
+                />
+              </label>
               <label className="brief-field">
                 <span>Must cover</span>
                 <textarea
                   value={brief.mustCover}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setBrief((current) => ({
                       ...current,
                       mustCover: event.target.value,
-                    }))
-                  }
+                    }));
+                    recordHumanRevision("must cover", event.target.value);
+                  }}
                   placeholder="Questions, comparisons, people, places, or claims"
+                  aria-label="Must cover"
                 />
               </label>
               <label className="brief-field">
                 <span>Constraints</span>
                 <textarea
                   value={brief.constraints}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setBrief((current) => ({
                       ...current,
                       constraints: event.target.value,
-                    }))
-                  }
+                    }));
+                    recordHumanRevision("constraints", event.target.value);
+                  }}
                   placeholder="Exclude, prioritise, recency, budget, point of view…"
+                  aria-label="Research constraints"
                 />
               </label>
               <label className="brief-field">
-                <span>Output</span>
+                <span>Deliverable</span>
                 <input
                   value={brief.outputFormat}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setBrief((current) => ({
                       ...current,
                       outputFormat: event.target.value,
-                    }))
-                  }
+                    }));
+                    recordHumanRevision("deliverable", event.target.value);
+                  }}
+                  aria-label="Research deliverable"
                 />
               </label>
-            </details>
+            </div>
             <div className="brief-prompt">
               <span>HUMAN ROLE</span>
               <p>
@@ -1583,6 +1772,14 @@ export default function Home() {
             />
             <div className="guide-actions">
               <button
+                className="download"
+                type="button"
+                disabled={reportSections.length === 0}
+                onClick={downloadReport}
+              >
+                Download .md ↓
+              </button>
+              <button
                 className={published ? "published" : "publish"}
                 type="button"
                 disabled={reportSections.length === 0}
@@ -1603,7 +1800,7 @@ export default function Home() {
                 value={reportTitle}
                 onChange={(event) => {
                   setReportTitle(event.target.value);
-                  setPublished(false);
+                  recordHumanRevision("report title", event.target.value);
                 }}
                 aria-label="Report title"
               />
@@ -1618,7 +1815,7 @@ export default function Home() {
             value={reportOverview}
             onChange={(event) => {
               setReportOverview(event.target.value);
-              setPublished(false);
+              recordHumanRevision("report overview", event.target.value);
             }}
             placeholder="The agent’s overview appears here. Edit it directly, then ask the agent to revise again."
             aria-label="Report overview"
@@ -1649,20 +1846,28 @@ export default function Home() {
                       <input
                         value={section.heading}
                         aria-label={`Section ${index + 1} heading`}
-                        onChange={(event) =>
+                        onChange={(event) => {
                           updateReportSection(section.id, {
                             heading: event.target.value,
-                          })
-                        }
+                          });
+                          recordHumanRevision(
+                            `section ${index + 1} heading`,
+                            event.target.value,
+                          );
+                        }}
                       />
                       <textarea
                         value={section.body}
                         aria-label={`Section ${index + 1} body`}
-                        onChange={(event) =>
+                        onChange={(event) => {
                           updateReportSection(section.id, {
                             body: event.target.value,
-                          })
-                        }
+                          });
+                          recordHumanRevision(
+                            `section ${index + 1} body`,
+                            event.target.value,
+                          );
+                        }}
                       />
                     </div>
                     <div className="report-citations">
@@ -1701,23 +1906,39 @@ export default function Home() {
                     <div className="dish-controls">
                       <button
                         type="button"
-                        onClick={() => moveReportSection(section.id, -1)}
+                        onClick={() => {
+                          moveReportSection(section.id, -1);
+                          recordHumanRevision(
+                            "report order",
+                            `Moved ${section.heading} up`,
+                          );
+                        }}
                       >
                         ↑
                       </button>
                       <button
                         type="button"
-                        onClick={() => moveReportSection(section.id, 1)}
+                        onClick={() => {
+                          moveReportSection(section.id, 1);
+                          recordHumanRevision(
+                            "report order",
+                            `Moved ${section.heading} down`,
+                          );
+                        }}
                       >
                         ↓
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
                           setReportSections((current) =>
                             current.filter((item) => item.id !== section.id),
-                          )
-                        }
+                          );
+                          recordHumanRevision(
+                            "report sections",
+                            `Removed ${section.heading}`,
+                          );
+                        }}
                       >
                         ×
                       </button>
