@@ -239,6 +239,32 @@ a {
   text-transform: uppercase;
   font-weight: 700;
 }
+.universal-composer button:disabled,
+.guide-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+.try-example-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.try-example-row button {
+  border: 0;
+  border-bottom: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+  padding: 3px 0;
+  font:
+    700 9px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
 .workspace-shell {
   max-width: 1380px;
   margin: 0 auto 110px;
@@ -336,6 +362,41 @@ a {
     serif;
   max-width: 330px;
   margin: 28px 0 30px;
+}
+.brief-field {
+  display: block;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.brief-field > span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font:
+    500 8px "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+.brief-field input,
+.brief-field textarea {
+  width: 100%;
+  border: 1px solid #bcb3a3;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+  outline: 0;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.brief-field textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+.brief-field input:focus,
+.brief-field textarea:focus {
+  border-color: var(--green);
+  background: #fff;
 }
 .preference-group {
   padding: 15px 0;
@@ -548,6 +609,35 @@ a {
   overflow: auto;
   padding-right: 3px;
 }
+.empty-state {
+  border: 1px dashed var(--line);
+  padding: 34px;
+  text-align: center;
+}
+.empty-state > span {
+  color: var(--red);
+  font:
+    500 8px "DM Mono",
+    monospace;
+  letter-spacing: 1px;
+}
+.empty-state h3 {
+  margin: 10px auto 8px;
+  font:
+    600 24px/1.1 Fraunces,
+    serif;
+}
+.empty-state p {
+  max-width: 540px;
+  margin: 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.source-empty {
+  margin-top: 16px;
+  background: #fbfaf5;
+}
 .video-source {
   display: grid;
   grid-template-columns: 112px 1fr 32px;
@@ -678,6 +768,10 @@ a {
 .transcript-engine > div:last-child button:hover {
   background: #edf1e9;
 }
+.transcript-engine > div:last-child button.active {
+  background: #e2eadf;
+  box-shadow: inset 3px 0 0 var(--green);
+}
 .transcript-engine button b {
   font:
     500 8px "DM Mono",
@@ -803,6 +897,109 @@ a {
     monospace;
   text-transform: uppercase;
   color: #aaa;
+}
+.report-empty {
+  margin: 20px 0;
+  padding: 55px 28px;
+  border-color: #595a53;
+  background: #22241f;
+}
+.report-empty h3 {
+  color: #fff;
+  font-size: 30px;
+}
+.report-empty p {
+  color: #aaa;
+}
+.report-empty button {
+  margin-top: 20px;
+  border: 1px solid #77776f;
+  background: transparent;
+  color: #fff;
+  padding: 10px 14px;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.report-section-list {
+  margin-top: 20px;
+}
+.report-card {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1.15fr) minmax(260px, 0.85fr) 38px;
+  gap: 18px;
+  padding: 24px 0;
+  border-top: 1px solid #55564f;
+}
+.report-copy input,
+.report-copy textarea {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  outline: 0;
+}
+.report-copy input {
+  padding: 0 0 9px;
+  font:
+    500 27px Fraunces,
+    serif;
+}
+.report-copy textarea {
+  min-height: 100px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #41423d;
+  background: #242622;
+  color: #c3c1b8;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.report-copy input:focus,
+.report-copy textarea:focus {
+  border-color: #82847a;
+  background: #292b27;
+}
+.report-citations > span {
+  color: #8d8d87;
+  font:
+    500 7px "DM Mono",
+    monospace;
+}
+.report-citations > p {
+  color: #777871;
+  font-size: 9px;
+}
+.report-citations button {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #4c4d46;
+  background: #242622;
+  color: #fff;
+  text-align: left;
+}
+.report-citations button:hover {
+  border-color: #d6df9c;
+}
+.report-citations button b {
+  color: #d6df9c;
+  font:
+    500 9px "DM Mono",
+    monospace;
+}
+.report-citations button span {
+  font-size: 9px;
+  font-weight: 700;
+}
+.report-citations button small {
+  display: block;
+  margin-top: 4px;
+  color: #aaa;
+  font-size: 8px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 .editor-note {
   width: 100%;
@@ -1097,6 +1294,16 @@ footer p {
   }
   .dish-card {
     grid-template-columns: 35px 1fr;
+  }
+  .report-card {
+    grid-template-columns: 35px 1fr;
+  }
+  .report-citations,
+  .report-card .dish-controls {
+    grid-column: 2;
+  }
+  .report-card .dish-controls {
+    display: flex;
   }
   .dish-evidence {
     grid-column: 2;

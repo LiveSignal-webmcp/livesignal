@@ -15,7 +15,7 @@ async function render() {
   );
 }
 
-test("server-renders the collaborative China food research workspace", async () => {
+test("server-renders a clean universal video research workspace", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -27,14 +27,16 @@ test("server-renders the collaborative China food research workspace", async () 
   );
   assert.match(html, /Ask widely/);
   assert.match(html, /Watch selectively/);
-  assert.match(html, /universal engine in one concrete project/i);
-  assert.match(html, /Import any public YouTube video/);
+  assert.match(html, /Start with any question—not a preloaded demo/i);
+  assert.match(html, /Load China food example/);
+  assert.match(html, /Import a real YouTube video/);
   assert.match(html, /Import latest browser evidence/);
   assert.match(html, /Research brief/);
-  assert.match(html, /Source desk/);
-  assert.match(html, /Editable guide/);
-  assert.match(html, /Dan dan noodles/);
-  assert.match(html, /Relevant sources, not “all of YouTube”/);
+  assert.match(html, /Source &amp; evidence desk/);
+  assert.match(html, /Editable report/);
+  assert.match(html, /No sources yet/i);
+  assert.match(html, /Your report starts here/i);
+  assert.doesNotMatch(html, /Dan dan noodles/);
   assert.match(html, /The page stays in the conversation/);
   assert.doesNotMatch(
     html,

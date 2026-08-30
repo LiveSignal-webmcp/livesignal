@@ -4,11 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DISHES,
   EVIDENCE,
-  INITIAL,
   SOURCES,
   videoUrl,
   type Source,
-  type Preferences,
 } from "./research-data";
 
 type TranscriptSegment = {
@@ -18,7 +16,30 @@ type TranscriptSegment = {
   durationSeconds: number;
   timestamp: string;
 };
-type ImportedSource = Source & { url: string; transcriptCount: number };
+
+type ResearchSource = Source & {
+  url: string;
+  transcriptCount: number;
+};
+
+type EvidenceItem = TranscriptSegment & {
+  sourceId: string;
+  note?: string;
+  confidence?: number;
+};
+
+type ResearchBrief = {
+  mustCover: string;
+  constraints: string;
+  outputFormat: string;
+};
+
+type ReportSection = {
+  id: string;
+  heading: string;
+  body: string;
+  evidenceIds: string[];
+};
 
 type ModelDocument = Document & {
   modelContext?: {
@@ -31,32 +52,74 @@ type ModelDocument = Document & {
   };
 };
 
+const EMPTY_BRIEF: ResearchBrief = {
+  mustCover: "",
+  constraints: "",
+  outputFormat: "Concise, evidence-backed report",
+};
+
+const EXAMPLE_BRIEF: ResearchBrief = {
+  mustCover: "Essential dishes in Shanghai, Chengdu, and Xi’an",
+  constraints: "Prioritise spicy noodles and street food. Avoid shellfish.",
+  outputFormat: "A practical 5-minute field guide",
+};
+
+const TOOL_COUNT = 16;
+
+function timestampUrl(source: ResearchSource, seconds = 0) {
+  const base = source.url || videoUrl(source);
+  if (!seconds) return base;
+  try {
+    const url = new URL(base);
+    url.searchParams.set("t", `${Math.floor(seconds)}s`);
+    return url.toString();
+  } catch {
+    return `${base}${base.includes("?") ? "&" : "?"}t=${Math.floor(seconds)}s`;
+  }
+}
+
+function exampleWorkspace() {
+  const sources: ResearchSource[] = SOURCES.map((source) => ({
+    ...source,
+    url: videoUrl(source),
+    transcriptCount: EVIDENCE.filter(
+      (evidence) => evidence.sourceId === source.id,
+    ).length,
+  }));
+  const evidence: EvidenceItem[] = EVIDENCE.map((item) => ({
+    id: item.id,
+    sourceId: item.sourceId,
+    text: item.quote,
+    note: item.note,
+    seconds: item.seconds,
+    durationSeconds: 0,
+    timestamp: item.time,
+    confidence: item.confidence,
+  }));
+  const sections: ReportSection[] = DISHES.map((dish) => ({
+    id: dish.id,
+    heading: `${dish.name} · ${dish.city}`,
+    body: `${dish.description} ${dish.warning}`,
+    evidenceIds: dish.evidenceIds,
+  }));
+  return { sources, evidence, sections };
+}
+
 export default function Home() {
-  const [goal, setGoal] = useState(
-    "Build a must-try food guide for my China trip from trusted YouTube videos",
-  );
-  const [preferences, setPreferences] = useState(INITIAL);
-  const [sourceIds, setSourceIds] = useState([
-    "chengdu-deep",
-    "xian-street",
-    "shanghai-bao",
-  ]);
-  const [dishIds, setDishIds] = useState(DISHES.map((dish) => dish.id));
-  const [pinned, setPinned] = useState(["ev-liangpi", "ev-dandan"]);
-  const [focusId, setFocusId] = useState("ev-dandan");
-  const [query, setQuery] = useState(
-    "street food in Shanghai, Chengdu and Xi'an",
-  );
-  const [title, setTitle] = useState("My must-try food guide to China");
-  const [note, setNote] = useState(
-    "Prioritise everyday places near transit and markets. Keep every recommendation traceable to a video moment.",
-  );
-  const [activity, setActivity] = useState("Brief ready · 5 sources reviewed");
+  const [goal, setGoal] = useState("");
+  const [brief, setBrief] = useState(EMPTY_BRIEF);
+  const [sources, setSources] = useState<ResearchSource[]>([]);
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+  const [focusEvidenceId, setFocusEvidenceId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [evidenceQuery, setEvidenceQuery] = useState("");
+  const [reportTitle, setReportTitle] = useState("Untitled research report");
+  const [reportOverview, setReportOverview] = useState("");
+  const [reportSections, setReportSections] = useState<ReportSection[]>([]);
+  const [activity, setActivity] = useState("Workspace ready for a new topic");
   const [published, setPublished] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [importedSources, setImportedSources] = useState<ImportedSource[]>([]);
-  const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
-  const [transcriptQuery, setTranscriptQuery] = useState("");
   const [ingestStatus, setIngestStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
@@ -65,65 +128,106 @@ export default function Home() {
     "checking" | "registered" | "unavailable" | "error"
   >("checking");
   const registered = useRef(false);
-  const allSources = useMemo(
-    () => [...SOURCES, ...importedSources],
-    [importedSources],
+
+  const focusEvidence = useMemo(
+    () => evidence.find((item) => item.id === focusEvidenceId) ?? evidence[0],
+    [evidence, focusEvidenceId],
   );
-  const transcriptMatches = useMemo(() => {
-    const term = transcriptQuery.trim().toLowerCase();
+  const visibleEvidence = useMemo(() => {
+    const term = evidenceQuery.trim().toLowerCase();
     return (
       term
-        ? transcript.filter((segment) =>
-            segment.text.toLowerCase().includes(term),
-          )
-        : transcript
-    ).slice(0, 12);
-  }, [transcript, transcriptQuery]);
-  const activeDishes = useMemo(
-    () =>
-      dishIds
-        .map((id) => DISHES.find((dish) => dish.id === id)!)
-        .filter(Boolean),
-    [dishIds],
-  );
-  const focus = EVIDENCE.find((item) => item.id === focusId) ?? EVIDENCE[0];
+        ? evidence.filter((item) => item.text.toLowerCase().includes(term))
+        : evidence
+    ).slice(0, 18);
+  }, [evidence, evidenceQuery]);
+
   const live = useRef({
     goal,
-    preferences,
-    sourceIds,
-    dishIds,
-    pinned,
-    title,
-    note,
+    brief,
+    sources,
+    evidence,
+    pinnedIds,
+    reportTitle,
+    reportOverview,
+    reportSections,
     published,
-    importedSources,
-    transcript,
   });
+
   useEffect(() => {
     live.current = {
       goal,
-      preferences,
-      sourceIds,
-      dishIds,
-      pinned,
-      title,
-      note,
+      brief,
+      sources,
+      evidence,
+      pinnedIds,
+      reportTitle,
+      reportOverview,
+      reportSections,
       published,
-      importedSources,
-      transcript,
     };
   }, [
     goal,
-    preferences,
-    sourceIds,
-    dishIds,
-    pinned,
-    title,
-    note,
+    brief,
+    sources,
+    evidence,
+    pinnedIds,
+    reportTitle,
+    reportOverview,
+    reportSections,
     published,
-    importedSources,
-    transcript,
   ]);
+
+  function startResearch(nextGoal = goal) {
+    const cleanGoal = nextGoal.trim();
+    if (!cleanGoal) return;
+    setGoal(cleanGoal);
+    setSearchQuery(cleanGoal);
+    setBrief(EMPTY_BRIEF);
+    setSources([]);
+    setEvidence([]);
+    setPinnedIds([]);
+    setFocusEvidenceId("");
+    setReportTitle("Untitled research report");
+    setReportOverview("");
+    setReportSections([]);
+    setPublished(false);
+    setIngestError("");
+    setActivity(`New research started · ${cleanGoal}`);
+    window.location.hash = "brief";
+  }
+
+  function loadExample() {
+    const example = exampleWorkspace();
+    setGoal(
+      "Build a must-try food guide for my China trip from trusted YouTube videos",
+    );
+    setSearchQuery("Chinese street food Shanghai Chengdu Xi’an");
+    setBrief(EXAMPLE_BRIEF);
+    setSources(example.sources);
+    setEvidence(example.evidence);
+    setPinnedIds(["ev-liangpi", "ev-dandan"]);
+    setFocusEvidenceId("ev-dandan");
+    setReportTitle("My must-try food guide to China");
+    setReportOverview(
+      "A source-backed shortlist for a traveller who loves spicy noodles and everyday street food.",
+    );
+    setReportSections(example.sections);
+    setPublished(false);
+    setIngestError("");
+    setActivity("China food example loaded · replace it with any topic");
+    window.location.hash = "brief";
+  }
+
+  function openYouTubeSearch(query = searchQuery || goal) {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return { ok: false, error: "A search query is required." };
+    setSearchQuery(cleanQuery);
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQuery)}`;
+    setActivity(`YouTube search opened · ${cleanQuery}`);
+    window.open(url, "_blank", "noopener,noreferrer");
+    return { ok: true, query: cleanQuery, url };
+  }
 
   async function ingestYouTube(url: string) {
     const normalized = url.trim();
@@ -137,36 +241,47 @@ export default function Home() {
     });
     const result = await response.json();
     if (!response.ok) {
+      const message = result.error ?? "The video could not be imported.";
       setIngestStatus("error");
-      setIngestError(result.error ?? "The video could not be imported.");
-      throw new Error(result.error ?? "The video could not be imported.");
+      setIngestError(message);
+      throw new Error(message);
     }
-    const source: ImportedSource = {
-      ...result.source,
-      city: "Imported",
-      duration: "CAPTIONS",
-      relevance: "Imported from public YouTube captions",
-      transcriptCount: result.transcript.segmentCount,
+    const segments = (result.transcript.segments as TranscriptSegment[]).map(
+      (segment) => ({ ...segment, sourceId: String(result.source.id) }),
+    );
+    const source: ResearchSource = {
+      id: String(result.source.id),
+      videoId: String(result.source.videoId),
+      url: String(result.source.url),
+      title: String(result.source.title),
+      creator: String(result.source.creator),
+      city: "YouTube",
+      duration: result.transcript.available ? "CAPTIONS" : "METADATA",
+      relevance: result.transcript.available
+        ? "Timestamped public captions imported"
+        : "Open with the browser adapter to collect evidence",
+      transcriptCount: segments.length,
     };
-    setImportedSources((current) => [
+    setSources((current) => [
       ...current.filter((item) => item.id !== source.id),
       source,
     ]);
-    setSourceIds((current) =>
-      current.includes(source.id) ? current : [...current, source.id],
-    );
-    setTranscript(result.transcript.segments);
-    setTranscriptQuery("");
+    setEvidence((current) => [
+      ...current.filter((item) => item.sourceId !== source.id),
+      ...segments,
+    ]);
+    if (segments[0]) setFocusEvidenceId(segments[0].id);
+    setEvidenceQuery("");
     setIngestStatus(result.transcript.available ? "ready" : "error");
     setIngestError(
       result.transcript.available
         ? ""
-        : String(result.fallback ?? result.warning),
+        : String(result.fallback ?? result.warning ?? "Captions unavailable."),
     );
     setActivity(
       result.transcript.available
-        ? `Imported ${result.transcript.segmentCount} timestamped caption segments`
-        : "Video metadata imported · browser evidence required",
+        ? `Imported ${segments.length} timestamped caption segments`
+        : "Video found · browser evidence needed for captions",
     );
     window.location.hash = "sources";
     return result;
@@ -174,6 +289,7 @@ export default function Home() {
 
   async function importBrowserEvidence() {
     setIngestStatus("loading");
+    setIngestError("");
     const requestId = crypto.randomUUID();
     const snapshot = await new Promise<Record<string, unknown> | null>(
       (resolve, reject) => {
@@ -210,43 +326,46 @@ export default function Home() {
       );
     const state = snapshot.state as Record<string, unknown> | undefined;
     const url = String(state?.url ?? "");
-    const videoId =
-      new URL(url).searchParams.get("v") ?? `browser-${Date.now()}`;
+    let videoId = `browser-${Date.now()}`;
+    try {
+      videoId = new URL(url).searchParams.get("v") ?? videoId;
+    } catch {
+      // Non-YouTube adapters can still provide evidence.
+    }
     const segments = (
       (snapshot.recentTranscript as
-        | Array<Record<string, unknown>>
-        | undefined) ?? []
+        Array<Record<string, unknown>> | undefined) ?? []
     )
-      .map((segment, index) => ({
+      .map((segment, index): EvidenceItem => ({
         id: String(segment.id ?? `${videoId}-${index}`),
+        sourceId: videoId,
         text: String(segment.text ?? ""),
         seconds: Number(segment.seconds ?? 0),
         durationSeconds: Number(segment.durationSeconds ?? 0),
         timestamp: String(segment.timestamp ?? "0:00"),
       }))
       .filter((segment) => segment.text);
-    const source: ImportedSource = {
+    const source: ResearchSource = {
       id: videoId,
       videoId,
       url,
       title: String(state?.title ?? "Browser evidence"),
-      creator: "Imported through LiveSignal extension",
-      city: "Browser adapter",
+      creator: "LiveSignal browser adapter",
+      city: "Browser",
       duration: "EVIDENCE",
-      relevance: "Native captions or realtime STT from the active browser tab",
+      relevance: "Native captions or realtime STT from the active tab",
       transcriptCount: segments.length,
     };
-    setImportedSources((current) => [
+    setSources((current) => [
       ...current.filter((item) => item.id !== source.id),
       source,
     ]);
-    setSourceIds((current) =>
-      current.includes(source.id) ? current : [...current, source.id],
-    );
-    setTranscript(segments);
-    setTranscriptQuery("");
+    setEvidence((current) => [
+      ...current.filter((item) => item.sourceId !== source.id),
+      ...segments,
+    ]);
+    if (segments[0]) setFocusEvidenceId(segments[0].id);
     setIngestStatus("ready");
-    setIngestError("");
     setActivity(`Imported ${segments.length} browser evidence segments`);
     window.location.hash = "sources";
     return {
@@ -259,41 +378,53 @@ export default function Home() {
     };
   }
 
-  function removeDish(id: string) {
-    setDishIds((items) => items.filter((item) => item !== id));
-    setActivity("Guide edited by human");
+  function pinEvidence(id: string) {
+    setPinnedIds((ids) =>
+      ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id],
+    );
+    setFocusEvidenceId(id);
+    setActivity("Evidence selection updated");
+  }
+
+  function addReportSection(section?: Partial<ReportSection>) {
+    const next: ReportSection = {
+      id: section?.id ?? crypto.randomUUID(),
+      heading: section?.heading ?? "New finding",
+      body: section?.body ?? "Write the finding, then attach source evidence.",
+      evidenceIds: section?.evidenceIds ?? [],
+    };
+    setReportSections((current) => [...current, next]);
+    setPublished(false);
+    setActivity("Report section added");
+    return next;
+  }
+
+  function updateReportSection(id: string, patch: Partial<ReportSection>) {
+    setReportSections((current) =>
+      current.map((section) =>
+        section.id === id ? { ...section, ...patch, id } : section,
+      ),
+    );
     setPublished(false);
   }
-  function moveDish(id: string, direction: -1 | 1) {
-    setDishIds((items) => {
-      const next = [...items];
-      const from = next.indexOf(id);
+
+  function moveReportSection(id: string, direction: -1 | 1) {
+    setReportSections((current) => {
+      const next = [...current];
+      const from = next.findIndex((section) => section.id === id);
       const to = Math.max(0, Math.min(next.length - 1, from + direction));
-      if (from < 0 || from === to) return items;
+      if (from < 0 || from === to) return current;
       [next[from], next[to]] = [next[to], next[from]];
       return next;
     });
+    setPublished(false);
     setActivity("Editorial order updated");
-    setPublished(false);
-  }
-  function revise(instruction: string) {
-    setDishIds(
-      DISHES.filter(
-        (dish) => dish.price === "$" && dish.id !== "shengjian",
-      ).map((dish) => dish.id),
-    );
-    setNote(
-      `Agent revision: ${instruction}. Lower-cost street food now leads; shellfish warnings and source citations were preserved.`,
-    );
-    setActivity("Agent revised the guide · citations preserved");
-    setPublished(false);
-    window.location.hash = "guide";
   }
 
   useEffect(() => {
     const page = document as ModelDocument;
     if (!page.modelContext) {
-      setTimeout(() => setMcp("unavailable"), 0);
+      window.setTimeout(() => setMcp("unavailable"), 0);
       return;
     }
     if (registered.current) return;
@@ -313,222 +444,91 @@ export default function Home() {
           inputSchema,
         }),
       );
+
     tool(
       "get_workspace_state",
-      "Returns the visible travel brief, selected sources, timestamped evidence, dish order, and publication status.",
-      () => ({
-        ...live.current,
-        sources: [...SOURCES, ...live.current.importedSources].filter((s) =>
-          live.current.sourceIds.includes(s.id),
-        ),
-        dishes: live.current.dishIds.map((id) =>
-          DISHES.find((d) => d.id === id),
-        ),
-        evidence: EVIDENCE,
-        importedTranscript: live.current.transcript,
-      }),
+      "Returns the current visible research brief, sources, timestamped evidence, editable report, and publication status.",
+      () => live.current,
     );
     tool(
       "set_research_goal",
-      "Starts or updates the universal video-research goal shown in LiveSignal. Optionally clears the China example so the human and agent can build a new report together.",
+      "Starts a clean video-research workspace for any topic. This visibly clears the previous project.",
       (input) => {
         const nextGoal = String(input.goal ?? "").trim();
-        if (!nextGoal)
-          return { ok: false, error: "A research goal is required." };
-        setGoal(nextGoal);
-        setQuery(nextGoal);
-        setActivity("Agent updated the research goal");
-        if (input.clearExample === true) {
-          setSourceIds([]);
-          setDishIds([]);
-          setPinned([]);
-          setImportedSources([]);
-          setTranscript([]);
-          setTitle(
-            String(input.reportTitle ?? "Untitled video research report"),
-          );
-          setNote(
-            "The agent is gathering timestamped evidence. Edit this report as the research develops.",
-          );
-        }
-        return {
-          ok: true,
-          goal: nextGoal,
-          exampleCleared: input.clearExample === true,
-        };
+        if (!nextGoal) return { ok: false, error: "A goal is required." };
+        startResearch(nextGoal);
+        return { ok: true, goal: nextGoal };
       },
       {
         type: "object",
-        properties: {
-          goal: { type: "string" },
-          clearExample: { type: "boolean" },
-          reportTitle: { type: "string" },
-        },
+        properties: { goal: { type: "string" } },
         required: ["goal"],
       },
     );
     tool(
-      "ingest_youtube_video",
-      "Imports a public YouTube video's metadata and timestamped captions into the visible source desk. If captions are unavailable, returns guidance to use the LiveSignal browser adapter or realtime STT.",
-      async (input) => ingestYouTube(String(input.url ?? "")),
+      "update_research_brief",
+      "Updates the visible must-cover points, constraints, and desired output format before or during research.",
+      (input) => {
+        const next = {
+          mustCover: String(input.mustCover ?? live.current.brief.mustCover),
+          constraints: String(
+            input.constraints ?? live.current.brief.constraints,
+          ),
+          outputFormat: String(
+            input.outputFormat ?? live.current.brief.outputFormat,
+          ),
+        };
+        setBrief(next);
+        setActivity("Agent updated the research brief");
+        return { ok: true, brief: next };
+      },
       {
         type: "object",
         properties: {
-          url: {
-            type: "string",
-            description:
-              "Public YouTube watch, shorts, live, embed URL, youtu.be URL, or video ID.",
-          },
+          mustCover: { type: "string" },
+          constraints: { type: "string" },
+          outputFormat: { type: "string" },
         },
+      },
+    );
+    tool(
+      "open_youtube_search",
+      "Opens YouTube search for any topic so the agent and human can choose real candidate videos together.",
+      (input) => openYouTubeSearch(String(input.query ?? "")),
+      {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    );
+    tool(
+      "ingest_youtube_video",
+      "Imports a public YouTube video's metadata and timestamped captions into the visible workspace.",
+      async (input) => ingestYouTube(String(input.url ?? "")),
+      {
+        type: "object",
+        properties: { url: { type: "string" } },
         required: ["url"],
       },
     );
     tool(
       "import_browser_evidence",
-      "Imports the latest native-caption or realtime-STT evidence collected by the user-authorized LiveSignal browser extension into this visible workspace.",
+      "Imports the latest caption or realtime-STT evidence collected by the user-authorized LiveSignal browser extension.",
       async () => importBrowserEvidence(),
     );
     tool(
       "search_video_evidence",
-      "Searches imported timestamped YouTube captions for a topic, claim, person, or phrase and returns source moments suitable for citations.",
+      "Searches all imported timestamped evidence for a topic, claim, name, or phrase.",
       (input) => {
-        const term = String(input.query ?? "")
-          .trim()
-          .toLowerCase();
-        const matches = live.current.transcript
-          .filter((segment) => segment.text.toLowerCase().includes(term))
+        const query = String(input.query ?? "").trim();
+        const matches = live.current.evidence
+          .filter((item) =>
+            item.text.toLowerCase().includes(query.toLowerCase()),
+          )
           .slice(0, 50);
-        setTranscriptQuery(String(input.query ?? ""));
-        setActivity(`Agent found ${matches.length} caption matches`);
-        return {
-          query: input.query,
-          matches,
-          segmentCount: live.current.transcript.length,
-        };
-      },
-      {
-        type: "object",
-        properties: { query: { type: "string" } },
-        required: ["query"],
-      },
-    );
-    tool(
-      "write_report",
-      "Writes or revises the visible report title and editable overview after researching video evidence. The human can continue editing both fields directly.",
-      (input) => {
-        const nextTitle = String(input.title ?? live.current.title);
-        const overview = String(input.overview ?? live.current.note);
-        setTitle(nextTitle);
-        setNote(overview);
-        setPublished(false);
-        setActivity("Agent drafted the editable report");
-        window.location.hash = "guide";
-        return { ok: true, title: nextTitle, overview };
-      },
-      {
-        type: "object",
-        properties: { title: { type: "string" }, overview: { type: "string" } },
-        required: ["title", "overview"],
-      },
-    );
-    tool(
-      "set_travel_preferences",
-      "Updates the visible brief with cities, tastes, dietary restrictions, budget, and travel style.",
-      (input) => {
-        const next: Preferences = {
-          cities: Array.isArray(input.cities)
-            ? input.cities.map(String)
-            : live.current.preferences.cities,
-          loves: Array.isArray(input.loves)
-            ? input.loves.map(String)
-            : live.current.preferences.loves,
-          avoids: Array.isArray(input.avoids)
-            ? input.avoids.map(String)
-            : live.current.preferences.avoids,
-          budget: String(input.budget ?? live.current.preferences.budget),
-          style: String(input.style ?? live.current.preferences.style),
-        };
-        setPreferences(next);
-        setActivity("Agent updated the research brief");
-        return { ok: true, preferences: next };
-      },
-      {
-        type: "object",
-        properties: {
-          cities: { type: "array", items: { type: "string" } },
-          loves: { type: "array", items: { type: "string" } },
-          avoids: { type: "array", items: { type: "string" } },
-          budget: { type: "string" },
-          style: { type: "string" },
-        },
-      },
-    );
-    tool(
-      "search_video_sources",
-      "Finds relevant YouTube candidates and exposes them in the visible source desk.",
-      (input) => {
-        const q = String(input.query ?? "China food");
-        setQuery(q);
-        setActivity(`Agent found ${SOURCES.length} candidate videos`);
-        window.location.hash = "sources";
-        return {
-          query: q,
-          candidates: SOURCES,
-          caveat: "Relevant candidates; not all of YouTube",
-        };
-      },
-      {
-        type: "object",
-        properties: { query: { type: "string" } },
-        required: ["query"],
-      },
-    );
-    tool(
-      "add_video_source",
-      "Adds a candidate video to the shared research set.",
-      (input) => {
-        const id = String(input.sourceId ?? "");
-        const source = SOURCES.find((s) => s.id === id);
-        if (!source) return { ok: false };
-        setSourceIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
-        setActivity("Agent added a source");
-        return { ok: true, source };
-      },
-      {
-        type: "object",
-        properties: { sourceId: { type: "string" } },
-        required: ["sourceId"],
-      },
-    );
-    tool(
-      "analyze_video_source",
-      "Shows timestamped food evidence available for a selected source.",
-      (input) => {
-        const sourceId = String(input.sourceId ?? "");
-        const evidence = EVIDENCE.filter((e) => e.sourceId === sourceId);
-        if (evidence[0]) setFocusId(evidence[0].id);
-        setActivity(`Agent analyzed ${evidence.length} evidence moments`);
-        return { sourceId, evidence };
-      },
-      {
-        type: "object",
-        properties: { sourceId: { type: "string" } },
-        required: ["sourceId"],
-      },
-    );
-    tool(
-      "find_food_recommendations",
-      "Searches current evidence for dishes matching a city, taste, or dietary constraint.",
-      (input) => {
-        const q = String(input.query ?? "").toLowerCase();
-        const matches = DISHES.filter((d) =>
-          `${d.name} ${d.chinese} ${d.city} ${d.description} ${d.warning}`
-            .toLowerCase()
-            .includes(q),
-        );
-        if (matches[0]) setFocusId(matches[0].evidenceIds[0]);
-        setActivity(`Agent found ${matches.length} matching recommendations`);
-        return { query: q, matches };
+        setEvidenceQuery(query);
+        setActivity(`Agent found ${matches.length} evidence matches`);
+        return { query, matches };
       },
       {
         type: "object",
@@ -538,14 +538,13 @@ export default function Home() {
     );
     tool(
       "pin_evidence",
-      "Pins a timestamped source moment in the shared workspace.",
+      "Pins or unpins a timestamped source moment for the shared report.",
       (input) => {
         const id = String(input.evidenceId ?? "");
-        if (!EVIDENCE.some((e) => e.id === id)) return { ok: false };
-        setPinned((ids) => (ids.includes(id) ? ids : [...ids, id]));
-        setFocusId(id);
-        setActivity("Agent pinned source evidence");
-        return { ok: true, evidence: EVIDENCE.find((e) => e.id === id) };
+        const item = live.current.evidence.find((entry) => entry.id === id);
+        if (!item) return { ok: false, error: "Evidence not found." };
+        pinEvidence(id);
+        return { ok: true, evidence: item };
       },
       {
         type: "object",
@@ -554,42 +553,79 @@ export default function Home() {
       },
     );
     tool(
-      "add_dish",
-      "Adds an evidence-backed dish to the visible guide.",
-      (input) => {
-        const id = String(input.dishId ?? "");
-        const dish = DISHES.find((d) => d.id === id);
-        if (!dish) return { ok: false };
-        setDishIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
-        setActivity("Agent added a dish");
-        return { ok: true, dish };
-      },
+      "add_report_section",
+      "Adds an editable, evidence-backed section to the visible report.",
+      (input) => ({
+        ok: true,
+        section: addReportSection({
+          heading: String(input.heading ?? "New finding"),
+          body: String(input.body ?? ""),
+          evidenceIds: Array.isArray(input.evidenceIds)
+            ? input.evidenceIds.map(String)
+            : [],
+        }),
+      }),
       {
         type: "object",
-        properties: { dishId: { type: "string" } },
-        required: ["dishId"],
+        properties: {
+          heading: { type: "string" },
+          body: { type: "string" },
+          evidenceIds: { type: "array", items: { type: "string" } },
+        },
+        required: ["heading", "body"],
       },
     );
     tool(
-      "remove_dish",
-      "Removes a dish from the visible guide at the user's editorial direction.",
+      "update_report_section",
+      "Revises one visible report section while keeping its timestamp citations explicit.",
       (input) => {
-        const id = String(input.dishId ?? "");
-        removeDish(id);
+        const id = String(input.sectionId ?? "");
+        updateReportSection(id, {
+          heading:
+            input.heading === undefined ? undefined : String(input.heading),
+          body: input.body === undefined ? undefined : String(input.body),
+          evidenceIds: Array.isArray(input.evidenceIds)
+            ? input.evidenceIds.map(String)
+            : undefined,
+        });
+        setActivity("Agent revised a report section");
+        return { ok: true, sectionId: id };
+      },
+      {
+        type: "object",
+        properties: {
+          sectionId: { type: "string" },
+          heading: { type: "string" },
+          body: { type: "string" },
+          evidenceIds: { type: "array", items: { type: "string" } },
+        },
+        required: ["sectionId"],
+      },
+    );
+    tool(
+      "remove_report_section",
+      "Removes a report section at the user's editorial direction.",
+      (input) => {
+        const id = String(input.sectionId ?? "");
+        setReportSections((current) =>
+          current.filter((section) => section.id !== id),
+        );
+        setPublished(false);
+        setActivity("Report section removed");
         return { ok: true, removed: id };
       },
       {
         type: "object",
-        properties: { dishId: { type: "string" } },
-        required: ["dishId"],
+        properties: { sectionId: { type: "string" } },
+        required: ["sectionId"],
       },
     );
     tool(
-      "reorder_dishes",
-      "Moves a dish up or down in the visible editorial order.",
+      "reorder_report_sections",
+      "Moves a report section up or down in the human-controlled editorial order.",
       (input) => {
-        moveDish(
-          String(input.dishId ?? ""),
+        moveReportSection(
+          String(input.sectionId ?? ""),
           String(input.direction) === "down" ? 1 : -1,
         );
         return { ok: true };
@@ -597,45 +633,117 @@ export default function Home() {
       {
         type: "object",
         properties: {
-          dishId: { type: "string" },
+          sectionId: { type: "string" },
           direction: { type: "string", enum: ["up", "down"] },
         },
-        required: ["dishId", "direction"],
+        required: ["sectionId", "direction"],
       },
     );
     tool(
-      "revise_guide",
-      "Revises the visible guide while preserving source citations and dietary constraints.",
+      "write_report",
+      "Writes a complete editable report from researched evidence. Each section may cite evidence IDs.",
       (input) => {
-        const instruction = String(
-          input.instruction ?? "Prioritise affordable street food",
-        );
-        revise(instruction);
+        const nextTitle = String(input.title ?? "Untitled research report");
+        const nextOverview = String(input.overview ?? "");
+        const nextSections = Array.isArray(input.sections)
+          ? (input.sections as Array<Record<string, unknown>>).map(
+              (section, index): ReportSection => ({
+                id: String(section.id ?? `section-${Date.now()}-${index}`),
+                heading: String(section.heading ?? `Finding ${index + 1}`),
+                body: String(section.body ?? ""),
+                evidenceIds: Array.isArray(section.evidenceIds)
+                  ? section.evidenceIds.map(String)
+                  : [],
+              }),
+            )
+          : live.current.reportSections;
+        setReportTitle(nextTitle);
+        setReportOverview(nextOverview);
+        setReportSections(nextSections);
+        setPublished(false);
+        setActivity("Agent drafted the editable report");
+        window.location.hash = "report";
         return {
           ok: true,
-          instruction,
-          citationsPreserved: true,
-          restrictionsPreserved: true,
+          title: nextTitle,
+          sectionCount: nextSections.length,
         };
       },
       {
         type: "object",
-        properties: { instruction: { type: "string" } },
+        properties: {
+          title: { type: "string" },
+          overview: { type: "string" },
+          sections: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                heading: { type: "string" },
+                body: { type: "string" },
+                evidenceIds: { type: "array", items: { type: "string" } },
+              },
+              required: ["heading", "body"],
+            },
+          },
+        },
+        required: ["title", "overview", "sections"],
+      },
+    );
+    tool(
+      "revise_report",
+      "Applies a requested revision to the report using replacement title, overview, or sections while preserving citations supplied by the agent.",
+      (input) => {
+        if (input.title !== undefined) setReportTitle(String(input.title));
+        if (input.overview !== undefined)
+          setReportOverview(String(input.overview));
+        if (Array.isArray(input.sections)) {
+          const next = (input.sections as Array<Record<string, unknown>>).map(
+            (section, index): ReportSection => ({
+              id: String(section.id ?? `revision-${Date.now()}-${index}`),
+              heading: String(section.heading ?? `Finding ${index + 1}`),
+              body: String(section.body ?? ""),
+              evidenceIds: Array.isArray(section.evidenceIds)
+                ? section.evidenceIds.map(String)
+                : [],
+            }),
+          );
+          setReportSections(next);
+        }
+        setPublished(false);
+        setActivity(
+          `Agent revision applied · ${String(input.instruction ?? "report improved")}`,
+        );
+        window.location.hash = "report";
+        return { ok: true, instruction: input.instruction };
+      },
+      {
+        type: "object",
+        properties: {
+          instruction: { type: "string" },
+          title: { type: "string" },
+          overview: { type: "string" },
+          sections: { type: "array", items: { type: "object" } },
+        },
         required: ["instruction"],
       },
     );
     tool(
       "open_video_timestamp",
-      "Opens the exact YouTube moment for cited evidence and focuses that evidence in LiveSignal.",
+      "Opens the exact source video moment for cited evidence.",
       (input) => {
-        const evidence = EVIDENCE.find((e) => e.id === input.evidenceId);
-        const source =
-          evidence && SOURCES.find((s) => s.id === evidence.sourceId);
-        if (!evidence || !source) return { ok: false };
-        setFocusId(evidence.id);
-        const url = videoUrl(source, evidence.seconds);
+        const item = live.current.evidence.find(
+          (entry) => entry.id === String(input.evidenceId ?? ""),
+        );
+        const source = live.current.sources.find(
+          (entry) => entry.id === item?.sourceId,
+        );
+        if (!item || !source) return { ok: false };
+        const url = timestampUrl(source, item.seconds);
+        setFocusEvidenceId(item.id);
         window.open(url, "_blank", "noopener,noreferrer");
-        return { ok: true, url, timestamp: evidence.time };
+        return { ok: true, url, timestamp: item.timestamp };
       },
       {
         type: "object",
@@ -644,23 +752,25 @@ export default function Home() {
       },
     );
     tool(
-      "publish_guide",
-      "Publishes the reviewed guide after the human approves its sources and recommendations.",
+      "publish_report",
+      "Marks the human-reviewed report as published after its evidence and wording are approved.",
       () => {
         setPublished(true);
-        setActivity("Guide published · citations locked");
-        window.location.hash = "guide";
+        setActivity("Report published · human approved");
+        window.location.hash = "report";
         return {
           ok: true,
-          title: live.current.title,
-          dishCount: live.current.dishIds.length,
+          title: live.current.reportTitle,
+          sectionCount: live.current.reportSections.length,
         };
       },
     );
     Promise.all(jobs)
       .then(() => setMcp("registered"))
       .catch(() => setMcp("error"));
-    // Handlers read current UI state through live.
+    // Tool handlers use the live ref so calls always read current visible state.
+    // Registration must run once: rerunning would duplicate the page's tools.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -670,7 +780,7 @@ export default function Home() {
         <div className="nav-links">
           <a href="#brief">Brief</a>
           <a href="#sources">Sources</a>
-          <a href="#guide">Guide</a>
+          <a href="#report">Report</a>
           <a href="/livesignal-extension-v0.5.0.zip" download>
             Extension
           </a>
@@ -678,7 +788,7 @@ export default function Home() {
         <div className={`mcp-status ${mcp}`}>
           <i />
           {mcp === "registered"
-            ? "18 WebMCP tools ready"
+            ? `${TOOL_COUNT} WebMCP tools ready`
             : mcp === "unavailable"
               ? "Open in WebMCP browser"
               : mcp === "error"
@@ -686,9 +796,10 @@ export default function Home() {
                 : "Checking WebMCP"}
         </div>
       </nav>
+
       <header className="project-hero" id="top">
         <div className="hero-kicker">
-          UNIVERSAL YOUTUBE RESEARCH / PERSON + AGENT
+          UNIVERSAL VIDEO RESEARCH / PERSON + AGENT
         </div>
         <div className="hero-grid">
           <div>
@@ -709,7 +820,7 @@ export default function Home() {
               <span>research topic</span>
               <b>1</b>
               <span>shared workspace</span>
-              <b>18</b>
+              <b>{TOOL_COUNT}</b>
               <span>WebMCP tools</span>
             </div>
           </div>
@@ -726,25 +837,35 @@ export default function Home() {
           <input
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") startResearch();
+            }}
+            placeholder="e.g. Compare practical home solar advice from installers"
             aria-label="Universal YouTube research goal"
           />
           <button
             type="button"
-            onClick={() => {
-              setQuery(goal);
-              setActivity("Research goal updated by human");
-              window.location.hash = "sources";
-            }}
+            disabled={!goal.trim()}
+            onClick={() => startResearch()}
           >
-            Start research →
+            Start new research →
+          </button>
+        </div>
+        <div className="try-example-row">
+          <span>Want to see a finished workflow first?</span>
+          <button type="button" onClick={loadExample}>
+            Load China food example
           </button>
         </div>
       </header>
+
       <section className="workspace-shell">
         <div className="workspace-head">
           <div>
-            <span className="section-no">EXAMPLE WORKSPACE / CHINA FOOD</span>
-            <h2>See the universal engine in one concrete project</h2>
+            <span className="section-no">
+              {goal ? "ACTIVE RESEARCH WORKSPACE" : "CLEAN-SLATE WORKSPACE"}
+            </span>
+            <h2>{goal || "Start with any question—not a preloaded demo"}</h2>
           </div>
           <div className="activity">
             <span className="agent-pulse" />
@@ -754,6 +875,7 @@ export default function Home() {
             </p>
           </div>
         </div>
+
         <div className="research-grid">
           <aside className="brief-panel" id="brief">
             <PanelLabel
@@ -761,52 +883,79 @@ export default function Home() {
               title="Research brief"
               sub="Human direction"
             />
-            <h3>What should this guide know about you?</h3>
-            <Preference label="Cities" values={preferences.cities} tone="red" />
-            <Preference
-              label="I love"
-              values={preferences.loves}
-              tone="green"
-            />
-            <Preference label="Avoid" values={preferences.avoids} tone="dark" />
-            <dl className="preference-details">
-              <div>
-                <dt>Budget</dt>
-                <dd>{preferences.budget}</dd>
-              </div>
-              <div>
-                <dt>Travel style</dt>
-                <dd>{preferences.style}</dd>
-              </div>
-            </dl>
+            <h3>Define what a useful answer must do.</h3>
+            <label className="brief-field">
+              <span>Must cover</span>
+              <textarea
+                value={brief.mustCover}
+                onChange={(event) =>
+                  setBrief((current) => ({
+                    ...current,
+                    mustCover: event.target.value,
+                  }))
+                }
+                placeholder="Questions, comparisons, people, places, or claims"
+              />
+            </label>
+            <label className="brief-field">
+              <span>Constraints</span>
+              <textarea
+                value={brief.constraints}
+                onChange={(event) =>
+                  setBrief((current) => ({
+                    ...current,
+                    constraints: event.target.value,
+                  }))
+                }
+                placeholder="Exclude, prioritise, recency, budget, point of view…"
+              />
+            </label>
+            <label className="brief-field">
+              <span>Output</span>
+              <input
+                value={brief.outputFormat}
+                onChange={(event) =>
+                  setBrief((current) => ({
+                    ...current,
+                    outputFormat: event.target.value,
+                  }))
+                }
+              />
+            </label>
             <div className="brief-prompt">
-              <span>Agent brief</span>
+              <span>TRY IT WITH YOUR AGENT</span>
               <p>
-                Find essential dishes across my three cities. Prioritise spicy
-                noodles and street food. Exclude shellfish and keep every claim
-                traceable.
+                “Research this topic across YouTube. Find relevant videos,
+                verify the strongest claims, and draft a cited report here.”
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setPreferences(INITIAL);
-                  setActivity("Human restored the original brief");
-                }}
-              >
-                Reset brief
+              <button type="button" onClick={loadExample}>
+                Or load the example
               </button>
             </div>
           </aside>
+
           <section className="source-panel" id="sources">
             <PanelLabel
               number="02"
-              title="Source desk"
+              title="Source & evidence desk"
               sub="Agent research, human judgment"
             />
+            <label className="source-search">
+              <span>⌕</span>
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search YouTube for candidate videos"
+                aria-label="Video research query"
+              />
+              <button type="button" onClick={() => openYouTubeSearch()}>
+                Find videos ↗
+              </button>
+            </label>
             <div className="youtube-import">
               <div>
-                <b>Import any public YouTube video</b>
-                <span>Metadata + timestamped captions</span>
+                <b>Import a real YouTube video</b>
+                <span>Public metadata + timestamped captions</span>
               </div>
               <input
                 value={youtubeUrl}
@@ -824,8 +973,8 @@ export default function Home() {
             </div>
             {ingestError && (
               <p className="ingest-error">
-                {ingestError} Use the LiveSignal extension for videos without
-                public captions.
+                {ingestError} The browser adapter can collect native captions or
+                realtime speech when server captions are blocked.
               </p>
             )}
             <button
@@ -840,48 +989,33 @@ export default function Home() {
             >
               Import latest browser evidence
             </button>
-            <label className="source-search">
-              <span>⌕</span>
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label="Video research query"
-              />
-              <button
-                type="button"
-                onClick={() =>
-                  setActivity(`Agent found ${SOURCES.length} candidate videos`)
-                }
-              >
-                Research
-              </button>
-            </label>
+
             <p className="coverage-note">
-              <b>{sourceIds.length} included</b> of {allSources.length} reviewed
-              · Relevant sources, not “all of YouTube”
+              <b>
+                {sources.length} real source{sources.length === 1 ? "" : "s"}
+              </b>
+              {" · "}
+              {evidence.length} timestamped evidence segment
+              {evidence.length === 1 ? "" : "s"}
             </p>
-            <p className="prototype-note">
-              Prototype research dataset · source URLs are real; excerpts and
-              timestamps require transcript verification before submission.
-            </p>
-            <div className="source-list">
-              {allSources.map((source) => {
-                const included = sourceIds.includes(source.id);
-                const fixtureCount = EVIDENCE.filter(
-                  (e) => e.sourceId === source.id,
-                ).length;
-                const count =
-                  "transcriptCount" in source
-                    ? Number(source.transcriptCount)
-                    : fixtureCount;
-                return (
-                  <article
-                    className={`video-source ${included ? "included" : ""}`}
-                    key={source.id}
-                  >
+
+            {sources.length === 0 ? (
+              <div className="empty-state source-empty">
+                <span>NO SOURCES YET</span>
+                <h3>Give the agent a topic, not a canned dataset.</h3>
+                <p>
+                  Ask the agent to find videos, paste any YouTube URL, or import
+                  evidence captured by the extension. Every source added here is
+                  visible and inspectable.
+                </p>
+              </div>
+            ) : (
+              <div className="source-list">
+                {sources.map((source) => (
+                  <article className="video-source included" key={source.id}>
                     <a
                       className="video-thumb"
-                      href={videoUrl(source)}
+                      href={source.url}
                       target="_blank"
                       rel="noreferrer"
                       style={{
@@ -892,270 +1026,311 @@ export default function Home() {
                       <i>▶</i>
                     </a>
                     <div className="source-copy">
-                      <span>{source.city} · YouTube</span>
+                      <span>{source.city} · SOURCE</span>
                       <h4>{source.title}</h4>
                       <p>
                         {source.creator} · {source.relevance}
                       </p>
-                      <small>
-                        {count
-                          ? `${count} timed caption segment${count === 1 ? "" : "s"}`
-                          : "Candidate · analysis pending"}
-                      </small>
+                      <small>{source.transcriptCount} timed segments</small>
                     </div>
                     <button
                       className="include-button"
                       type="button"
+                      aria-label={`Remove ${source.title}`}
                       onClick={() => {
-                        setSourceIds((ids) =>
-                          included
-                            ? ids.filter((id) => id !== source.id)
-                            : [...ids, source.id],
+                        setSources((current) =>
+                          current.filter((item) => item.id !== source.id),
                         );
-                        setActivity("Source desk updated by human");
+                        setEvidence((current) =>
+                          current.filter((item) => item.sourceId !== source.id),
+                        );
+                        setActivity("Source removed by human");
                       }}
                     >
-                      {included ? "✓" : "+"}
+                      ×
                     </button>
                   </article>
-                );
-              })}
-            </div>
-            {transcript.length > 0 && (
+                ))}
+              </div>
+            )}
+
+            {evidence.length > 0 && (
               <div className="transcript-engine">
                 <div>
-                  <span>CAPTION ENGINE · {transcript.length} SEGMENTS</span>
+                  <span>EVIDENCE INDEX · {evidence.length} SEGMENTS</span>
                   <input
-                    value={transcriptQuery}
-                    onChange={(event) => setTranscriptQuery(event.target.value)}
-                    placeholder="Search imported evidence"
+                    value={evidenceQuery}
+                    onChange={(event) => setEvidenceQuery(event.target.value)}
+                    placeholder="Search evidence"
                     aria-label="Search imported captions"
                   />
                 </div>
                 <div>
-                  {transcriptMatches.map((segment) => (
+                  {visibleEvidence.map((item) => (
                     <button
                       type="button"
-                      key={segment.id}
-                      onClick={() => {
-                        const source = importedSources.at(-1);
-                        if (source)
-                          window.open(
-                            `${source.url}&t=${Math.floor(segment.seconds)}s`,
-                            "_blank",
-                            "noopener,noreferrer",
-                          );
-                      }}
+                      className={focusEvidence?.id === item.id ? "active" : ""}
+                      key={item.id}
+                      onClick={() => setFocusEvidenceId(item.id)}
                     >
-                      <b>{segment.timestamp}</b>
-                      <span>{segment.text}</span>
+                      <b>{item.timestamp}</b>
+                      <span>{item.text}</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
-            <div className="evidence-focus">
-              <div className="evidence-head">
-                <span>EVIDENCE IN FOCUS</span>
-                <button
-                  className={pinned.includes(focus.id) ? "pinned" : ""}
-                  type="button"
-                  onClick={() =>
-                    setPinned((ids) =>
-                      ids.includes(focus.id)
-                        ? ids.filter((id) => id !== focus.id)
-                        : [...ids, focus.id],
-                    )
-                  }
-                >
-                  {pinned.includes(focus.id) ? "★ Pinned" : "☆ Pin"}
-                </button>
+
+            {focusEvidence && (
+              <div className="evidence-focus">
+                <div className="evidence-head">
+                  <span>EVIDENCE IN FOCUS</span>
+                  <button
+                    className={
+                      pinnedIds.includes(focusEvidence.id) ? "pinned" : ""
+                    }
+                    type="button"
+                    onClick={() => pinEvidence(focusEvidence.id)}
+                  >
+                    {pinnedIds.includes(focusEvidence.id)
+                      ? "★ Pinned"
+                      : "☆ Pin"}
+                  </button>
+                </div>
+                <blockquote>“{focusEvidence.text}”</blockquote>
+                {focusEvidence.note && <p>{focusEvidence.note}</p>}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const source = sources.find(
+                        (item) => item.id === focusEvidence.sourceId,
+                      );
+                      if (source)
+                        window.open(
+                          timestampUrl(source, focusEvidence.seconds),
+                          "_blank",
+                          "noopener,noreferrer",
+                        );
+                    }}
+                  >
+                    <b>{focusEvidence.timestamp}</b> Open source moment ↗
+                  </button>
+                  <span>
+                    {focusEvidence.confidence
+                      ? `${focusEvidence.confidence}% fixture confidence`
+                      : "Direct transcript evidence"}
+                  </span>
+                </div>
               </div>
-              <blockquote>“{focus.quote}”</blockquote>
-              <p>{focus.note}</p>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const s = SOURCES.find(
-                      (item) => item.id === focus.sourceId,
-                    )!;
-                    window.open(
-                      videoUrl(s, focus.seconds),
-                      "_blank",
-                      "noopener,noreferrer",
-                    );
-                  }}
-                >
-                  <b>{focus.time}</b> Open source moment ↗
-                </button>
-                <span>{focus.confidence}% evidence confidence</span>
-              </div>
-            </div>
+            )}
           </section>
         </div>
-        <section className="guide-panel" id="guide">
+
+        <section className="guide-panel" id="report">
           <div className="guide-toolbar">
             <PanelLabel
               number="03"
-              title="Editable guide"
+              title="Editable report"
               sub="Created together"
               light
             />
             <div className="guide-actions">
-              <button
-                type="button"
-                onClick={() =>
-                  revise(
-                    "Replace expensive restaurants with street-food alternatives",
-                  )
-                }
-              >
-                Ask agent to revise
+              <button type="button" onClick={() => addReportSection()}>
+                + Add section
               </button>
               <button
                 className={published ? "published" : "publish"}
                 type="button"
+                disabled={reportSections.length === 0}
                 onClick={() => {
                   setPublished(true);
-                  setActivity("Guide published · citations locked");
+                  setActivity("Report published · human approved");
                 }}
               >
-                {published ? "✓ Published" : "Publish guide"}
+                {published ? "✓ Published" : "Publish report"}
               </button>
             </div>
           </div>
+
           <div className="guide-title-row">
             <div>
-              <p>PERSONAL FIELD GUIDE · 5 MIN READ</p>
+              <p>VIDEO RESEARCH REPORT · HUMAN EDITABLE</p>
               <input
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
+                value={reportTitle}
+                onChange={(event) => {
+                  setReportTitle(event.target.value);
                   setPublished(false);
                 }}
-                aria-label="Guide title"
+                aria-label="Report title"
               />
             </div>
             <span>
-              {String(activeDishes.length).padStart(2, "0")}
-              <small>must-try dishes</small>
+              {String(reportSections.length).padStart(2, "0")}
+              <small>report sections</small>
             </span>
           </div>
           <textarea
             className="editor-note"
-            value={note}
-            onChange={(e) => {
-              setNote(e.target.value);
+            value={reportOverview}
+            onChange={(event) => {
+              setReportOverview(event.target.value);
               setPublished(false);
             }}
-            aria-label="Editor note"
+            placeholder="The agent’s overview appears here. Edit it directly, then ask the agent to revise again."
+            aria-label="Report overview"
           />
-          <div className="dish-list">
-            {activeDishes.map((dish, index) => (
-              <article className="dish-card" key={dish.id}>
-                <div className="dish-index">
-                  {String(index + 1).padStart(2, "0")}
-                </div>
-                <div className="dish-main">
-                  <div className="dish-city">
-                    {dish.city}
-                    <span>{dish.price}</span>
-                  </div>
-                  <h3>
-                    {dish.name}
-                    <small>{dish.chinese}</small>
-                  </h3>
-                  <p className="pinyin">{dish.pinyin}</p>
-                  <p>{dish.description}</p>
-                  <div className="match-line">
-                    <span>{dish.match}</span>
-                    <span className="spice">
-                      {Array.from({ length: 5 }, (_, i) => (
-                        <i className={i < dish.spice ? "hot" : ""} key={i}>
-                          ◆
-                        </i>
-                      ))}
-                    </span>
-                  </div>
-                  <p className="warning">◌ {dish.warning}</p>
-                </div>
-                <div className="dish-evidence">
-                  <span>SOURCE PROOF</span>
-                  {dish.evidenceIds.map((id) => {
-                    const ev = EVIDENCE.find((e) => e.id === id)!;
-                    const source = SOURCES.find((s) => s.id === ev.sourceId)!;
-                    return (
+
+          {reportSections.length === 0 ? (
+            <div className="empty-state report-empty">
+              <span>YOUR REPORT STARTS HERE</span>
+              <h3>No answer is prewritten.</h3>
+              <p>
+                Once evidence is collected, ask the agent to draft a report. It
+                will create editable sections with timestamp citations on this
+                same page.
+              </p>
+              <button type="button" onClick={() => addReportSection()}>
+                Add a section manually
+              </button>
+            </div>
+          ) : (
+            <div className="report-section-list">
+              {reportSections.map((section, index) => {
+                const citations = section.evidenceIds
+                  .map((id) => evidence.find((item) => item.id === id))
+                  .filter(Boolean) as EvidenceItem[];
+                return (
+                  <article className="report-card" key={section.id}>
+                    <div className="dish-index">
+                      {String(index + 1).padStart(2, "0")}
+                    </div>
+                    <div className="report-copy">
+                      <input
+                        value={section.heading}
+                        aria-label={`Section ${index + 1} heading`}
+                        onChange={(event) =>
+                          updateReportSection(section.id, {
+                            heading: event.target.value,
+                          })
+                        }
+                      />
+                      <textarea
+                        value={section.body}
+                        aria-label={`Section ${index + 1} body`}
+                        onChange={(event) =>
+                          updateReportSection(section.id, {
+                            body: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="report-citations">
+                      <span>SOURCE PROOF · {citations.length}</span>
+                      {citations.length ? (
+                        citations.map((item) => {
+                          const source = sources.find(
+                            (entry) => entry.id === item.sourceId,
+                          );
+                          return (
+                            <button
+                              type="button"
+                              key={item.id}
+                              onClick={() => {
+                                setFocusEvidenceId(item.id);
+                                if (source)
+                                  window.open(
+                                    timestampUrl(source, item.seconds),
+                                    "_blank",
+                                    "noopener,noreferrer",
+                                  );
+                              }}
+                            >
+                              <b>{item.timestamp}</b>
+                              <span>
+                                {source?.creator ?? "Source"}
+                                <small>“{item.text}”</small>
+                              </span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <p>No citations attached yet.</p>
+                      )}
+                    </div>
+                    <div className="dish-controls">
                       <button
                         type="button"
-                        key={id}
-                        onClick={() => setFocusId(id)}
+                        onClick={() => moveReportSection(section.id, -1)}
                       >
-                        <b>{ev.time}</b>
-                        <span>
-                          {source.creator}
-                          <small>“{ev.quote}”</small>
-                        </span>
+                        ↑
                       </button>
-                    );
-                  })}
-                </div>
-                <div className="dish-controls">
-                  <button type="button" onClick={() => moveDish(dish.id, -1)}>
-                    ↑
-                  </button>
-                  <button type="button" onClick={() => moveDish(dish.id, 1)}>
-                    ↓
-                  </button>
-                  <button type="button" onClick={() => removeDish(dish.id)}>
-                    ×
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
+                      <button
+                        type="button"
+                        onClick={() => moveReportSection(section.id, 1)}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setReportSections((current) =>
+                            current.filter((item) => item.id !== section.id),
+                          )
+                        }
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
           <div className="guide-foot">
             <p>
-              <span>Evidence policy</span>Every recommendation keeps a source
-              moment. Creator opinion and LiveSignal inference stay visibly
-              distinct.
+              <span>Evidence policy</span>
+              Claims should point back to an inspectable source moment. Human
+              edits and agent revisions share the same visible document.
             </p>
             <div>
-              <b>{pinned.length}</b> pinned moments <b>{sourceIds.length}</b>{" "}
-              active sources
+              <b>{pinnedIds.length}</b> pinned moments <b>{sources.length}</b>{" "}
+              sources
             </div>
           </div>
         </section>
       </section>
+
       <section className="challenge-proof">
         <p className="section-no">WHY WEBMCP</p>
         <h2>The page stays in the conversation.</h2>
         <div>
           <p>
-            <b>Human taste</b>
+            <b>Human direction</b>
             <span>
-              You set preferences, inspect sources, edit the shortlist, and
-              approve the result.
+              You define the question, inspect sources, edit the report, and
+              approve what gets published.
             </span>
           </p>
           <p>
             <b>Agent scale</b>
             <span>
-              The agent structures hours of video through semantic page tools.
+              The agent finds videos and structures hours of footage through
+              semantic page tools.
             </span>
           </p>
           <p>
-            <b>Shared control</b>
+            <b>Shared creation</b>
             <span>
-              Both operate on one visible workspace instead of an isolated chat
-              answer.
+              Both work on one visible artifact—not an isolated chat answer or a
+              hidden automation.
             </span>
           </p>
         </div>
       </section>
       <footer>
         <Brand />
-        <p>Hours of video → one guide you can trust and shape.</p>
+        <p>Hours of video → one report you can trust and shape.</p>
         <span>WebMCP Challenge · 2026</span>
       </footer>
     </main>
@@ -1172,6 +1347,7 @@ function Brand() {
     </a>
   );
 }
+
 function PanelLabel({
   number,
   title,
@@ -1190,28 +1366,6 @@ function PanelLabel({
         {title}
         <small>{sub}</small>
       </p>
-    </div>
-  );
-}
-function Preference({
-  label,
-  values,
-  tone,
-}: {
-  label: string;
-  values: string[];
-  tone: "red" | "green" | "dark";
-}) {
-  return (
-    <div className="preference-group">
-      <span>{label}</span>
-      <div>
-        {values.map((value) => (
-          <em className={tone} key={value}>
-            {value}
-          </em>
-        ))}
-      </div>
     </div>
   );
 }
