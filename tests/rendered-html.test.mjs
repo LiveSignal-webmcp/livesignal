@@ -32,6 +32,9 @@ test("server-renders a clean universal video research workspace", async () => {
   assert.match(html, /Preview China food run/);
   assert.match(html, /Import a real YouTube video/);
   assert.match(html, /Import latest extension evidence/);
+  assert.match(html, /Import a complete browser-agent run/);
+  assert.match(html, /Agent result JSON/);
+  assert.match(html, /Apply agent result/);
   assert.match(html, /Research brief/);
   assert.match(html, /Source &amp; evidence desk/);
   assert.match(html, /Editable report/);

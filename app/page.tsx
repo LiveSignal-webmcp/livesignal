@@ -41,6 +41,13 @@ type ReportSection = {
   evidenceIds: string[];
 };
 
+type AgentProjectPayload = {
+  request?: unknown;
+  brief?: Record<string, unknown>;
+  sources?: Array<Record<string, unknown>>;
+  report?: Record<string, unknown>;
+};
+
 type RunPhase =
   | "ready"
   | "discovering"
@@ -146,6 +153,8 @@ export default function Home() {
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [ingestError, setIngestError] = useState("");
+  const [agentResultJson, setAgentResultJson] = useState("");
+  const [agentResultError, setAgentResultError] = useState("");
   const [mcp, setMcp] = useState<
     "checking" | "registered" | "unavailable" | "error"
   >("checking");
@@ -507,6 +516,132 @@ export default function Home() {
     );
     setActivity(`ChatGPT added ${segments.length} evidence moments`);
     return { ok: true, source, evidence: segments };
+  }
+
+  function applyAgentProject() {
+    try {
+      const payload = JSON.parse(agentResultJson) as AgentProjectPayload;
+      const request = String(payload.request ?? "").trim();
+      if (!request) throw new Error("The agent result needs a research request.");
+
+      const nextSources: ResearchSource[] = [];
+      const nextEvidence: EvidenceItem[] = [];
+      for (const [sourceIndex, sourceInput] of (
+        Array.isArray(payload.sources) ? payload.sources : []
+      ).entries()) {
+        const url = String(sourceInput.url ?? "").trim();
+        if (!url) throw new Error(`Source ${sourceIndex + 1} needs a URL.`);
+        let videoId = String(sourceInput.videoId ?? "").trim();
+        if (!videoId) {
+          try {
+            const parsed = new URL(url);
+            videoId =
+              parsed.searchParams.get("v") ??
+              parsed.pathname.split("/").filter(Boolean).at(-1) ??
+              `agent-${sourceIndex + 1}`;
+          } catch {
+            videoId = `agent-${sourceIndex + 1}`;
+          }
+        }
+        const sourceId = String(sourceInput.id ?? videoId);
+        const sourceEvidence = (
+          Array.isArray(sourceInput.evidence)
+            ? (sourceInput.evidence as Array<Record<string, unknown>>)
+            : []
+        )
+          .map((item, evidenceIndex): EvidenceItem => ({
+            id: String(item.id ?? `${sourceId}-evidence-${evidenceIndex + 1}`),
+            sourceId,
+            text: String(item.text ?? "").trim(),
+            seconds: Number(item.seconds ?? 0),
+            durationSeconds: Number(item.durationSeconds ?? 0),
+            timestamp: String(item.timestamp ?? "0:00"),
+            note: item.note === undefined ? undefined : String(item.note),
+            confidence:
+              item.confidence === undefined
+                ? undefined
+                : Number(item.confidence),
+          }))
+          .filter((item) => item.text);
+        nextSources.push({
+          id: sourceId,
+          videoId,
+          url,
+          title: String(sourceInput.title ?? "Agent-researched video"),
+          creator: String(sourceInput.creator ?? "YouTube creator"),
+          city: "Agent research",
+          duration: "BROWSER",
+          relevance: String(
+            sourceInput.relevance ??
+              "Selected and verified by ChatGPT in the browser",
+          ),
+          transcriptCount: sourceEvidence.length,
+        });
+        nextEvidence.push(...sourceEvidence);
+      }
+      if (nextSources.length === 0)
+        throw new Error("The agent result needs at least one source.");
+      if (nextEvidence.length === 0)
+        throw new Error("The agent result needs timestamped evidence.");
+
+      const briefInput = payload.brief ?? {};
+      const reportInput = payload.report ?? {};
+      const sections = (
+        Array.isArray(reportInput.sections)
+          ? (reportInput.sections as Array<Record<string, unknown>>)
+          : []
+      ).map((section, index): ReportSection => ({
+        id: String(section.id ?? `agent-section-${index + 1}`),
+        heading: String(section.heading ?? `Finding ${index + 1}`),
+        body: String(section.body ?? ""),
+        evidenceIds: Array.isArray(section.evidenceIds)
+          ? section.evidenceIds.map(String)
+          : [],
+      }));
+      if (sections.length === 0)
+        throw new Error("The agent result needs at least one report section.");
+
+      const evidenceIds = new Set(nextEvidence.map((item) => item.id));
+      const unknownCitation = sections
+        .flatMap((section) => section.evidenceIds)
+        .find((id) => !evidenceIds.has(id));
+      if (unknownCitation)
+        throw new Error(`Unknown evidence citation: ${unknownCitation}`);
+
+      setGoal(request);
+      setSearchQuery(request);
+      setBrief({
+        mustCover: String(briefInput.mustCover ?? ""),
+        constraints: String(briefInput.constraints ?? ""),
+        outputFormat: String(
+          briefInput.outputFormat ?? "Concise, evidence-backed report",
+        ),
+      });
+      setSources(nextSources);
+      setEvidence(nextEvidence);
+      setPinnedIds(nextEvidence.map((item) => item.id));
+      setFocusEvidenceId(nextEvidence[0].id);
+      setEvidenceQuery("");
+      setReportTitle(String(reportInput.title ?? "Agent research report"));
+      setReportOverview(String(reportInput.overview ?? ""));
+      setReportSections(sections);
+      setPublished(false);
+      setRunPhase("review");
+      setAgentResultError("");
+      setAgentEvents([
+        {
+          id: crypto.randomUUID(),
+          label: "Agent run imported",
+          detail: `${nextSources.length} sources · ${nextEvidence.length} evidence moments · ${sections.length} report sections`,
+        },
+      ]);
+      setActivity("Agent research imported · ready for human review");
+      window.location.hash = "report";
+    } catch (error) {
+      setAgentResultError(
+        error instanceof Error ? error.message : "Invalid agent result JSON.",
+      );
+    }
   }
 
   function pinEvidence(id: string) {
@@ -1276,6 +1411,29 @@ export default function Home() {
               >
                 Import latest extension evidence
               </button>
+              <div className="agent-result-import">
+                <div>
+                  <span>AGENT RETURN CHANNEL</span>
+                  <b>Import a complete browser-agent run</b>
+                  <p>
+                    Fallback for agent browsers without native WebMCP tool
+                    exposure. Sources, evidence, and citations remain editable.
+                  </p>
+                </div>
+                <textarea
+                  value={agentResultJson}
+                  onChange={(event) => setAgentResultJson(event.target.value)}
+                  aria-label="Agent result JSON"
+                  placeholder='{"request":"…","sources":[…],"report":{"sections":[…]}}'
+                  spellCheck={false}
+                />
+                <button type="button" onClick={applyAgentProject}>
+                  Apply agent result
+                </button>
+              </div>
+              {agentResultError && (
+                <p className="agent-result-error">{agentResultError}</p>
+              )}
             </details>
 
             <p className="coverage-note">
