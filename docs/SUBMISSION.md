@@ -2,35 +2,36 @@
 
 ## Elevator pitch (under 200 characters)
 
-LiveSignal turns livestreams into searchable, evidence-backed events so agents can find what matters and show the exact moment—without making people watch for hours.
+LiveSignal turns fragmented YouTube knowledge into a cited visual canvas that people and agents research, arrange, refine, and share together.
 
 ## Inspiration
 
-The useful information in a livestream is often one sentence in a two-hour feed: a release date, a product change, a creator's opinion, or an answer to a question. People miss it because they cannot watch everything. Agents should be able to gather that information, but generic browser control does not make a stream queryable or provide evidence for an answer.
+Useful knowledge is scattered across hours of video. An agent can summarize it, but a finished chat answer still leaves the person outside the creative process. We wanted the agent to do the watching and evidence work while the human brings taste, priorities, and personal context to a shared artifact.
 
 ## What it does
 
-LiveSignal helps an agent discover streams on existing platforms, inspect a supported stream's state, search timestamped transcript evidence, make focused in-tab watch rules, and jump the player to the supporting moment. The web Companion demonstrates the experience; the browser adapter makes the real YouTube transcript path available through WebMCP.
+LiveSignal is a WebMCP-powered research and creation desk. An agent can create a brief, select YouTube sources, record timestamped evidence, and draft a visual guide. The human can then move, resize, rewrite, restyle, or add blocks on the same canvas. Those edits become structured revision events the active agent can inspect and react to without replacing the human's composition. The result exports as a shareable PNG, while the underlying evidence report remains downloadable as Markdown.
 
 ## How we built it
 
-The Companion page registers semantic WebMCP tools for discovery, stream search, event retrieval, timestamp navigation, and watch rules. The Manifest V3 browser adapter runs on YouTube and Twitch pages. On YouTube, it reads only transcript segments that YouTube renders in its own transcript panel, normalizes them into timestamped records, searches them, creates deduplicated topic-match events, and seeks the existing video element to supporting evidence.
+The web app registers semantic WebMCP tools for the entire workflow: research setup, source and evidence ingestion, report writing, canvas creation, scoped block updates, ordering, theme changes, revision acknowledgement, source navigation, and export. The React canvas stores source IDs and evidence IDs with each research block. A Manifest V3 adapter supplies a compatibility path for evidence gathered on existing YouTube and Twitch pages, including optional user-approved realtime transcription.
 
 ## Challenges we ran into
 
-WebMCP tools are registered by pages, but the product value is on third-party livestream sites. We treated the extension as the compatibility layer and kept the Companion page as the reliable on-site demo. A second constraint was avoiding overclaiming: not all streams have transcripts, live player DVR windows differ, and a tab-local prototype cannot honestly promise persistent background monitoring.
+The first version stopped when the report was generated. That was useful automation, but weak collaboration. The harder design problem was giving human layout actions semantic meaning the agent could understand while protecting authorship: moving one card must not authorize regenerating the whole canvas. We also had to keep sourced claims, personal notes, and unsupported statements visibly distinct.
 
 ## Accomplishments that we're proud of
 
-- A real evidence loop: agent query → transcript result → actual player seek.
-- Semantic tools instead of fragile click or pixel automation.
-- An adapter approach that adds value to existing platforms instead of rebuilding them.
-- Explicit product boundaries: the demo timeline is labeled seeded data, and the real adapter reports missing transcript evidence instead of fabricating it.
+- One visible artifact shared by a human and an agent instead of a hidden agent workflow.
+- Structured canvas tools for scoped edits, reordering, themes, and export.
+- A revision stream that lets an active agent respond to human changes without wiping them out.
+- Timestamp evidence that remains attached as content moves through the layout.
+- A universal blank-state flow that judges can test with a topic of their choice.
 
 ## What we learned
 
-For agents, a timestamp alone is not enough. The useful primitive is a timestamp paired with source evidence and a reliable action to open it. We also learned that a small, dependable integration on one platform is much more persuasive than a broad claim across every livestream service.
+Human-agent collaboration needs alternating turns with persistent state, not a generation step followed by manual cleanup. WebMCP is most valuable when it exposes the person's creative decisions—order, emphasis, wording, and visual mood—as semantic context the agent can respect. We also learned that a shareable final form gives the research a reason to be edited rather than merely consumed.
 
 ## What's next for LiveSignal
 
-Add durable user-approved watch rules, transcript ingestion that works when a platform exposes captions but not a transcript drawer, server-side event history, and additional platform adapters. We would also add clear confidence and source labels for richer audio and visual event extraction before expanding the product promise.
+Add richer freeform canvas geometry, presence and change previews, reusable artifact templates for guides and comparisons, durable projects, and source-aware image selection. Longer term, LiveSignal can become a universal layer for turning video knowledge into trusted visual explainers, itineraries, learning boards, and buying guides.

@@ -40,10 +40,15 @@ test("server-renders a clean universal video research workspace", async () => {
   assert.match(html, /Research request/);
   assert.match(html, /Human → agent/i);
   assert.match(html, /Source &amp; evidence desk/);
-  assert.match(html, /Editable report/);
+  assert.match(html, /Creation canvas/);
+  assert.match(html, /Human composes · agent reacts/);
+  assert.match(html, /Visual canvas/);
+  assert.match(html, /Evidence draft/);
+  assert.match(html, /Download PNG/i);
+  assert.match(html, /Human ↔ agent loop/i);
   assert.match(html, /Download \.md/i);
   assert.match(html, /Waiting for ChatGPT/i);
-  assert.match(html, /Your report starts here/i);
+  assert.match(html, /The shared artifact starts here/i);
   assert.doesNotMatch(html, /Dan dan noodles/);
   assert.match(html, /The page stays in the conversation/);
   assert.doesNotMatch(

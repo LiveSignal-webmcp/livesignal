@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toPng } from "html-to-image";
 import {
   DISHES,
   EVIDENCE,
@@ -39,6 +40,20 @@ type ReportSection = {
   heading: string;
   body: string;
   evidenceIds: string[];
+};
+
+type CanvasBlockKind = "feature" | "steps" | "note" | "quote";
+type CanvasBlockSpan = "half" | "wide";
+type CanvasTheme = "notebook" | "editorial" | "field-notes";
+
+type CanvasBlock = {
+  id: string;
+  kind: CanvasBlockKind;
+  title: string;
+  body: string;
+  evidenceIds: string[];
+  span: CanvasBlockSpan;
+  accent: "coral" | "sage" | "gold" | "ink";
 };
 
 type AgentProjectPayload = {
@@ -84,7 +99,7 @@ type ModelDocument = Document & {
 const EMPTY_BRIEF: ResearchBrief = {
   mustCover: "",
   constraints: "",
-  outputFormat: "Concise, evidence-backed report",
+  outputFormat: "A concise, shareable visual guide",
 };
 
 const EXAMPLE_BRIEF: ResearchBrief = {
@@ -93,7 +108,7 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 19;
+const TOOL_COUNT = 27;
 const PHASES: Array<{ id: RunPhase; label: string }> = [
   { id: "discovering", label: "Discover" },
   { id: "extracting", label: "Extract" },
@@ -140,6 +155,19 @@ function exampleWorkspace() {
   return { sources, evidence, sections };
 }
 
+function canvasFromReport(sections: ReportSection[]): CanvasBlock[] {
+  const accents: CanvasBlock["accent"][] = ["coral", "sage", "gold", "ink"];
+  return sections.map((section, index) => ({
+    id: `canvas-${section.id}`,
+    kind: index === 0 ? "feature" : index === sections.length - 1 ? "note" : "steps",
+    title: section.heading.replace(/^\d+\.\s*/, ""),
+    body: section.body,
+    evidenceIds: section.evidenceIds,
+    span: index === 0 || (sections.length > 3 && index === sections.length - 1) ? "wide" : "half",
+    accent: accents[index % accents.length],
+  }));
+}
+
 export default function Home() {
   const [goal, setGoal] = useState("");
   const [brief, setBrief] = useState(EMPTY_BRIEF);
@@ -156,6 +184,12 @@ export default function Home() {
   const [runPhase, setRunPhase] = useState<RunPhase>("ready");
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [humanRevisions, setHumanRevisions] = useState<HumanRevision[]>([]);
+  const [canvasBlocks, setCanvasBlocks] = useState<CanvasBlock[]>([]);
+  const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>("notebook");
+  const [selectedCanvasId, setSelectedCanvasId] = useState("");
+  const [draggedCanvasId, setDraggedCanvasId] = useState("");
+  const [canvasView, setCanvasView] = useState<"canvas" | "draft">("canvas");
+  const [canvasExporting, setCanvasExporting] = useState(false);
   const [published, setPublished] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [ingestStatus, setIngestStatus] = useState<
@@ -185,6 +219,13 @@ export default function Home() {
     () => humanRevisions.filter((revision) => !revision.acknowledged),
     [humanRevisions],
   );
+  const selectedCanvasBlock = useMemo(
+    () =>
+      canvasBlocks.find((block) => block.id === selectedCanvasId) ??
+      canvasBlocks[0],
+    [canvasBlocks, selectedCanvasId],
+  );
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const live = useRef({
     goal,
@@ -199,6 +240,8 @@ export default function Home() {
     runPhase,
     agentEvents,
     humanRevisions,
+    canvasBlocks,
+    canvasTheme,
   });
 
   useEffect(() => {
@@ -215,6 +258,8 @@ export default function Home() {
       runPhase,
       agentEvents,
       humanRevisions,
+      canvasBlocks,
+      canvasTheme,
     };
   }, [
     goal,
@@ -229,6 +274,8 @@ export default function Home() {
     runPhase,
     agentEvents,
     humanRevisions,
+    canvasBlocks,
+    canvasTheme,
   ]);
 
   function addAgentEvent(label: string, detail: string) {
@@ -338,6 +385,104 @@ export default function Home() {
     return { ok: true, filename, markdown };
   }
 
+  function seedCanvas(sections: ReportSection[]) {
+    const blocks = canvasFromReport(sections);
+    setCanvasBlocks(blocks);
+    setSelectedCanvasId(blocks[0]?.id ?? "");
+    setCanvasView("canvas");
+    return blocks;
+  }
+
+  function updateCanvasBlock(id: string, patch: Partial<CanvasBlock>) {
+    setCanvasBlocks((current) =>
+      current.map((block) =>
+        block.id === id ? { ...block, ...patch, id } : block,
+      ),
+    );
+    setPublished(false);
+  }
+
+  function addCanvasBlock(input?: Partial<CanvasBlock>) {
+    const block: CanvasBlock = {
+      id: input?.id ?? `canvas-note-${crypto.randomUUID()}`,
+      kind: input?.kind ?? "note",
+      title: input?.title ?? "My note",
+      body:
+        input?.body ??
+        "Add a personal observation, substitution, reminder, or finishing touch.",
+      evidenceIds: input?.evidenceIds ?? [],
+      span: input?.span ?? "half",
+      accent: input?.accent ?? "coral",
+    };
+    setCanvasBlocks((current) => [...current, block]);
+    setSelectedCanvasId(block.id);
+    setPublished(false);
+    return block;
+  }
+
+  function removeCanvasBlock(id: string) {
+    setCanvasBlocks((current) => current.filter((block) => block.id !== id));
+    setSelectedCanvasId((current) => (current === id ? "" : current));
+    setPublished(false);
+  }
+
+  function reorderCanvasBlock(id: string, targetIndex: number) {
+    setCanvasBlocks((current) => {
+      const from = current.findIndex((block) => block.id === id);
+      if (from < 0) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      const to = Math.max(0, Math.min(next.length, targetIndex));
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setPublished(false);
+  }
+
+  function dropCanvasBlock(targetId: string) {
+    if (!draggedCanvasId || draggedCanvasId === targetId) return;
+    const targetIndex = canvasBlocks.findIndex((block) => block.id === targetId);
+    const moved = canvasBlocks.find((block) => block.id === draggedCanvasId);
+    reorderCanvasBlock(draggedCanvasId, targetIndex);
+    recordHumanRevision(
+      "canvas layout",
+      `Moved ${moved?.title ?? "a block"} to position ${targetIndex + 1}`,
+    );
+    setDraggedCanvasId("");
+  }
+
+  async function downloadCanvas() {
+    if (!canvasRef.current || canvasBlocks.length === 0)
+      return { ok: false, error: "Create the canvas first." };
+    setCanvasExporting(true);
+    try {
+      const dataUrl = await toPng(canvasRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: canvasTheme === "field-notes" ? "#1f2821" : "#f3ead8",
+      });
+      const slug =
+        reportTitle
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "") || "livesignal-canvas";
+      const filename = `${slug}.png`;
+      const anchor = document.createElement("a");
+      anchor.href = dataUrl;
+      anchor.download = filename;
+      anchor.click();
+      setActivity("Shareable canvas downloaded");
+      return { ok: true, filename };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Canvas export failed.";
+      setActivity("Canvas export needs another try");
+      return { ok: false, error: message };
+    } finally {
+      setCanvasExporting(false);
+    }
+  }
+
   function startResearch(nextGoal = goal) {
     const cleanGoal = nextGoal.trim();
     if (!cleanGoal) return;
@@ -351,6 +496,10 @@ export default function Home() {
     setReportTitle("Untitled research report");
     setReportOverview("");
     setReportSections([]);
+    setCanvasBlocks([]);
+    setSelectedCanvasId("");
+    setCanvasTheme("notebook");
+    setCanvasView("canvas");
     setHumanRevisions([]);
     setPublished(false);
     setIngestError("");
@@ -382,6 +531,8 @@ export default function Home() {
       "A source-backed shortlist for a traveller who loves spicy noodles and everyday street food.",
     );
     setReportSections(example.sections);
+    seedCanvas(example.sections);
+    setCanvasTheme("notebook");
     setHumanRevisions([]);
     setPublished(false);
     setIngestError("");
@@ -390,7 +541,7 @@ export default function Home() {
       {
         id: crypto.randomUUID(),
         label: "Example completed",
-        detail: "5 sources · 6 cited report sections",
+        detail: "5 sources · 6 cited canvas sections",
       },
     ]);
     setActivity("China food example loaded · replace it with any topic");
@@ -732,7 +883,7 @@ export default function Home() {
         mustCover: String(briefInput.mustCover ?? ""),
         constraints: String(briefInput.constraints ?? ""),
         outputFormat: String(
-          briefInput.outputFormat ?? "Concise, evidence-backed report",
+          briefInput.outputFormat ?? "A concise, shareable visual guide",
         ),
       });
       setSources(nextSources);
@@ -743,6 +894,8 @@ export default function Home() {
       setReportTitle(String(reportInput.title ?? "Agent research report"));
       setReportOverview(String(reportInput.overview ?? ""));
       setReportSections(sections);
+      seedCanvas(sections);
+      setCanvasTheme("notebook");
       setHumanRevisions([]);
       setPublished(false);
       setRunPhase("review");
@@ -755,7 +908,7 @@ export default function Home() {
         },
       ]);
       setActivity("Agent research imported · ready for human review");
-      window.location.hash = "report";
+      window.location.hash = "canvas";
     } catch (error) {
       setAgentResultError(
         error instanceof Error ? error.message : "Invalid agent result JSON.",
@@ -832,7 +985,7 @@ export default function Home() {
 
     tool(
       "get_workspace_state",
-      "Returns the current visible research brief, sources, timestamped evidence, editable report, and publication status.",
+      "Returns the current visible research brief, sources, timestamped evidence, evidence draft, visual canvas, and publication status.",
       () => live.current,
     );
     tool(
@@ -894,7 +1047,7 @@ export default function Home() {
           mustCover: String(input.mustCover ?? ""),
           constraints: String(input.constraints ?? ""),
           outputFormat: String(
-            input.outputFormat ?? "Concise, evidence-backed report",
+            input.outputFormat ?? "A concise, shareable visual guide",
           ),
         };
         setBrief(nextBrief);
@@ -1153,6 +1306,7 @@ export default function Home() {
         setReportTitle(nextTitle);
         setReportOverview(nextOverview);
         setReportSections(nextSections);
+        if (live.current.canvasBlocks.length === 0) seedCanvas(nextSections);
         setPublished(false);
         setRunPhase("review");
         addAgentEvent(
@@ -1233,6 +1387,225 @@ export default function Home() {
       },
     );
     tool(
+      "get_canvas_state",
+      "Returns the current human-composed visual canvas, block order, theme, citations, and pending human revisions. Read this before reacting to a layout or copy change.",
+      () => ({
+        title: live.current.reportTitle,
+        overview: live.current.reportOverview,
+        theme: live.current.canvasTheme,
+        blocks: live.current.canvasBlocks,
+        pendingHumanRevisions: live.current.humanRevisions.filter(
+          (revision) => !revision.acknowledged,
+        ),
+      }),
+    );
+    tool(
+      "create_canvas",
+      "Creates or replaces the shareable visual canvas from evidence-backed blocks. Use once after research; do not overwrite later human composition unless explicitly asked.",
+      (input) => {
+        const nextBlocks = (
+          Array.isArray(input.blocks)
+            ? (input.blocks as Array<Record<string, unknown>>)
+            : []
+        ).map((block, index): CanvasBlock => ({
+          id: String(block.id ?? `agent-canvas-${index + 1}`),
+          kind: ["feature", "steps", "note", "quote"].includes(
+            String(block.kind),
+          )
+            ? (String(block.kind) as CanvasBlockKind)
+            : "note",
+          title: String(block.title ?? `Block ${index + 1}`),
+          body: String(block.body ?? ""),
+          evidenceIds: Array.isArray(block.evidenceIds)
+            ? block.evidenceIds.map(String)
+            : [],
+          span: String(block.span) === "wide" ? "wide" : "half",
+          accent: ["coral", "sage", "gold", "ink"].includes(
+            String(block.accent),
+          )
+            ? (String(block.accent) as CanvasBlock["accent"])
+            : "sage",
+        }));
+        if (!nextBlocks.length)
+          return { ok: false, error: "At least one canvas block is required." };
+        setCanvasBlocks(nextBlocks);
+        setSelectedCanvasId(nextBlocks[0].id);
+        if (["notebook", "editorial", "field-notes"].includes(String(input.theme)))
+          setCanvasTheme(String(input.theme) as CanvasTheme);
+        setCanvasView("canvas");
+        setActivity("Agent composed the visual canvas");
+        window.location.hash = "canvas";
+        return { ok: true, blockCount: nextBlocks.length };
+      },
+      {
+        type: "object",
+        properties: {
+          theme: {
+            type: "string",
+            enum: ["notebook", "editorial", "field-notes"],
+          },
+          blocks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                kind: {
+                  type: "string",
+                  enum: ["feature", "steps", "note", "quote"],
+                },
+                title: { type: "string" },
+                body: { type: "string" },
+                evidenceIds: { type: "array", items: { type: "string" } },
+                span: { type: "string", enum: ["half", "wide"] },
+                accent: {
+                  type: "string",
+                  enum: ["coral", "sage", "gold", "ink"],
+                },
+              },
+              required: ["title", "body"],
+            },
+          },
+        },
+        required: ["blocks"],
+      },
+    );
+    tool(
+      "add_canvas_block",
+      "Adds a new visual block without disturbing the human's existing canvas order.",
+      (input) => ({
+        ok: true,
+        block: addCanvasBlock({
+          kind: ["feature", "steps", "note", "quote"].includes(
+            String(input.kind),
+          )
+            ? (String(input.kind) as CanvasBlockKind)
+            : "note",
+          title: String(input.title ?? "New block"),
+          body: String(input.body ?? ""),
+          evidenceIds: Array.isArray(input.evidenceIds)
+            ? input.evidenceIds.map(String)
+            : [],
+          span: String(input.span) === "wide" ? "wide" : "half",
+          accent: ["coral", "sage", "gold", "ink"].includes(
+            String(input.accent),
+          )
+            ? (String(input.accent) as CanvasBlock["accent"])
+            : "coral",
+        }),
+      }),
+      {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["feature", "steps", "note", "quote"] },
+          title: { type: "string" },
+          body: { type: "string" },
+          evidenceIds: { type: "array", items: { type: "string" } },
+          span: { type: "string", enum: ["half", "wide"] },
+          accent: { type: "string", enum: ["coral", "sage", "gold", "ink"] },
+        },
+        required: ["title", "body"],
+      },
+    );
+    tool(
+      "update_canvas_block",
+      "Reacts to human composition by rewriting, restyling, resizing, or re-citing one canvas block while preserving every other block.",
+      (input) => {
+        const id = String(input.blockId ?? "");
+        const patch: Partial<CanvasBlock> = {};
+        if (input.title !== undefined) patch.title = String(input.title);
+        if (input.body !== undefined) patch.body = String(input.body);
+        if (Array.isArray(input.evidenceIds))
+          patch.evidenceIds = input.evidenceIds.map(String);
+        if (["feature", "steps", "note", "quote"].includes(String(input.kind)))
+          patch.kind = String(input.kind) as CanvasBlockKind;
+        if (["half", "wide"].includes(String(input.span)))
+          patch.span = String(input.span) as CanvasBlockSpan;
+        if (["coral", "sage", "gold", "ink"].includes(String(input.accent)))
+          patch.accent = String(input.accent) as CanvasBlock["accent"];
+        updateCanvasBlock(id, patch);
+        addAgentEvent("Canvas block revised", String(input.reason ?? id));
+        setActivity("Agent reacted to the human canvas edit");
+        return { ok: true, blockId: id };
+      },
+      {
+        type: "object",
+        properties: {
+          blockId: { type: "string" },
+          title: { type: "string" },
+          body: { type: "string" },
+          kind: { type: "string", enum: ["feature", "steps", "note", "quote"] },
+          span: { type: "string", enum: ["half", "wide"] },
+          accent: { type: "string", enum: ["coral", "sage", "gold", "ink"] },
+          evidenceIds: { type: "array", items: { type: "string" } },
+          reason: { type: "string" },
+        },
+        required: ["blockId"],
+      },
+    );
+    tool(
+      "remove_canvas_block",
+      "Removes one canvas block when the human asks for a simpler composition.",
+      (input) => {
+        const id = String(input.blockId ?? "");
+        removeCanvasBlock(id);
+        setActivity("Agent simplified the canvas");
+        return { ok: true, removed: id };
+      },
+      {
+        type: "object",
+        properties: { blockId: { type: "string" } },
+        required: ["blockId"],
+      },
+    );
+    tool(
+      "reorder_canvas_blocks",
+      "Reorders one canvas block in response to human editorial direction without rewriting its content.",
+      (input) => {
+        reorderCanvasBlock(
+          String(input.blockId ?? ""),
+          Number(input.targetIndex ?? 0),
+        );
+        setActivity("Agent adjusted the canvas composition");
+        return { ok: true };
+      },
+      {
+        type: "object",
+        properties: {
+          blockId: { type: "string" },
+          targetIndex: { type: "number" },
+        },
+        required: ["blockId", "targetIndex"],
+      },
+    );
+    tool(
+      "set_canvas_theme",
+      "Changes the visual canvas theme while preserving human block order, copy, and citations.",
+      (input) => {
+        const theme = String(input.theme ?? "notebook") as CanvasTheme;
+        if (!["notebook", "editorial", "field-notes"].includes(theme))
+          return { ok: false, error: "Unknown canvas theme." };
+        setCanvasTheme(theme);
+        setActivity("Agent restyled the canvas");
+        return { ok: true, theme };
+      },
+      {
+        type: "object",
+        properties: {
+          theme: {
+            type: "string",
+            enum: ["notebook", "editorial", "field-notes"],
+          },
+        },
+        required: ["theme"],
+      },
+    );
+    tool(
+      "download_canvas_png",
+      "Downloads the current human-and-agent visual canvas as a shareable high-resolution PNG.",
+      () => downloadCanvas(),
+    );
+    tool(
       "open_video_timestamp",
       "Opens the exact source video moment for cited evidence.",
       (input) => {
@@ -1290,7 +1663,7 @@ export default function Home() {
         <div className="nav-links">
           <a href="#brief">Brief</a>
           <a href="#sources">Sources</a>
-          <a href="#report">Report</a>
+          <a href="#report">Create</a>
           <a href="/livesignal-extension-v0.5.0.zip" download>
             Extension
           </a>
@@ -1348,7 +1721,7 @@ export default function Home() {
             <span>ONE REQUEST. THE AGENT OPERATES THIS PAGE.</span>
             <p>
               “Research the best beginner advice for growing tomatoes on a
-              balcony. Compare three YouTube sources and build a cited report in
+              balcony. Compare three YouTube sources and build a cited visual guide in
               LiveSignal.”
             </p>
           </div>
@@ -1437,7 +1810,7 @@ export default function Home() {
                 <b>No setup form required</b>
                 <span>
                   ChatGPT will create the brief, add sources, extract evidence,
-                  and deliver the report through this page’s WebMCP tools.
+                  and compose the visual guide through this page’s WebMCP tools.
                 </span>
               </p>
             )}
@@ -1526,7 +1899,7 @@ export default function Home() {
               <span>HUMAN ROLE</span>
               <p>
                 Review the agent’s choices, inspect source moments, and edit the
-                finished report. Research setup is optional.
+                finished canvas. Research setup is optional.
               </p>
               <button type="button" onClick={loadExample}>
                 Or load the example
@@ -1766,11 +2139,19 @@ export default function Home() {
           <div className="guide-toolbar">
             <PanelLabel
               number="03"
-              title="Editable report"
-              sub="Created together"
+              title="Creation canvas"
+              sub="Human composes · agent reacts"
               light
             />
             <div className="guide-actions">
+              <button
+                className="download canvas-download"
+                type="button"
+                disabled={canvasBlocks.length === 0 || canvasExporting}
+                onClick={() => downloadCanvas()}
+              >
+                {canvasExporting ? "Rendering…" : "Download PNG ↓"}
+              </button>
               <button
                 className="download"
                 type="button"
@@ -1785,13 +2166,312 @@ export default function Home() {
                 disabled={reportSections.length === 0}
                 onClick={() => {
                   setPublished(true);
-                  setActivity("Report published · human approved");
+                  setActivity("Canvas published · human approved");
                 }}
               >
-                {published ? "✓ Published" : "Publish report"}
+                {published ? "✓ Published" : "Publish canvas"}
               </button>
             </div>
           </div>
+
+          <div className="studio-mode-switch" aria-label="Creation studio view">
+            <button
+              type="button"
+              className={canvasView === "canvas" ? "active" : ""}
+              onClick={() => setCanvasView("canvas")}
+            >
+              Visual canvas
+            </button>
+            <button
+              type="button"
+              className={canvasView === "draft" ? "active" : ""}
+              onClick={() => setCanvasView("draft")}
+            >
+              Evidence draft
+            </button>
+            <span>
+              {canvasBlocks.length} movable block
+              {canvasBlocks.length === 1 ? "" : "s"}
+            </span>
+          </div>
+
+          {canvasView === "canvas" ? (
+            <section className="canvas-workbench" id="canvas">
+              <div className="canvas-stage">
+                {canvasBlocks.length === 0 ? (
+                  <div className="empty-state canvas-empty">
+                    <span>THE SHARED ARTIFACT STARTS HERE</span>
+                    <h3>Turn the research into something worth sharing.</h3>
+                    <p>
+                      The agent creates evidence-backed blocks. You arrange,
+                      rewrite, resize, and personalize them while ChatGPT reacts
+                      through the page’s canvas tools.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={reportSections.length === 0}
+                      onClick={() => seedCanvas(reportSections)}
+                    >
+                      Compose from research
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className={`share-canvas theme-${canvasTheme}`}
+                    ref={canvasRef}
+                  >
+                    <div className="canvas-holes" aria-hidden="true">
+                      {Array.from({ length: 12 }).map((_, index) => (
+                        <i key={index} />
+                      ))}
+                    </div>
+                    <header className="canvas-cover">
+                      <div className="canvas-cover-copy">
+                        <span>LIVE SIGNAL · FIELD GUIDE</span>
+                        <h2>{reportTitle}</h2>
+                        <p>{reportOverview}</p>
+                        <div>
+                          <b>{sources.length}</b> VIDEO SOURCES
+                          <b>{evidence.length}</b> TIMED MOMENTS
+                        </div>
+                      </div>
+                      {sources[0] && (
+                        <div
+                          className="canvas-hero-image"
+                          style={{
+                            backgroundImage: `url(https://i.ytimg.com/vi/${sources[0].videoId}/hqdefault.jpg)`,
+                          }}
+                        >
+                          <span>FROM THE SOURCE DESK</span>
+                          <b>{sources[0].creator}</b>
+                        </div>
+                      )}
+                    </header>
+                    <div className="canvas-block-grid">
+                      {canvasBlocks.map((block, index) => {
+                        const blockEvidence = block.evidenceIds
+                          .map((id) => evidence.find((item) => item.id === id))
+                          .filter(Boolean) as EvidenceItem[];
+                        return (
+                          <article
+                            className={`canvas-block kind-${block.kind} span-${block.span} accent-${block.accent} ${
+                              selectedCanvasBlock?.id === block.id
+                                ? "selected"
+                                : ""
+                            }`}
+                            draggable
+                            key={block.id}
+                            onDragStart={() => setDraggedCanvasId(block.id)}
+                            onDragEnd={() => setDraggedCanvasId("")}
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={() => dropCanvasBlock(block.id)}
+                          >
+                            <div className="canvas-block-topline">
+                              <span>{String(index + 1).padStart(2, "0")}</span>
+                              <b>{block.kind}</b>
+                              <button
+                                type="button"
+                                aria-label={`Edit ${block.title}`}
+                                onClick={() => setSelectedCanvasId(block.id)}
+                              >
+                                Edit · ⋮⋮
+                              </button>
+                            </div>
+                            <h3>{block.title}</h3>
+                            <p>{block.body}</p>
+                            <div className="canvas-block-proof">
+                              {blockEvidence.slice(0, 3).map((item) => {
+                                const source = sources.find(
+                                  (entry) => entry.id === item.sourceId,
+                                );
+                                return (
+                                  <span key={item.id}>
+                                    {item.timestamp} · {source?.creator ?? "Source"}
+                                  </span>
+                                );
+                              })}
+                              {blockEvidence.length === 0 && (
+                                <span className="personal-note">
+                                  HUMAN NOTE · NO SOURCE CLAIM
+                                </span>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                    <footer className="canvas-signoff">
+                      <span>MADE TOGETHER WITH LIVESIGNAL</span>
+                      <b>Research you can see, shape, and share.</b>
+                      <i>✦</i>
+                    </footer>
+                  </div>
+                )}
+              </div>
+
+              <aside className="canvas-inspector">
+                <div
+                  className={`canvas-collab-card ${
+                    pendingHumanRevisions.length ? "pending" : ""
+                  }`}
+                >
+                  <span>HUMAN ↔ AGENT LOOP</span>
+                  <b>
+                    {pendingHumanRevisions.length
+                      ? `${pendingHumanRevisions.length} change${pendingHumanRevisions.length === 1 ? "" : "s"} ready for agent reaction`
+                      : "Canvas and agent are caught up"}
+                  </b>
+                  <p>
+                    Dragging, rewriting, resizing, or restyling creates a
+                    structured WebMCP revision without replacing your canvas.
+                  </p>
+                </div>
+
+                <div className="canvas-control-group theme-picker">
+                  <span>CANVAS MOOD</span>
+                  <div>
+                    {(["notebook", "editorial", "field-notes"] as CanvasTheme[]).map(
+                      (theme) => (
+                        <button
+                          className={canvasTheme === theme ? "active" : ""}
+                          type="button"
+                          key={theme}
+                          onClick={() => {
+                            setCanvasTheme(theme);
+                            recordHumanRevision(
+                              "canvas theme",
+                              `Changed visual mood to ${theme}`,
+                            );
+                          }}
+                        >
+                          {theme.replace("-", " ")}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                </div>
+
+                {selectedCanvasBlock ? (
+                  <div className="canvas-block-editor">
+                    <span>SELECTED BLOCK</span>
+                    <label>
+                      <small>Title</small>
+                      <input
+                        value={selectedCanvasBlock.title}
+                        aria-label="Canvas block title"
+                        onChange={(event) => {
+                          updateCanvasBlock(selectedCanvasBlock.id, {
+                            title: event.target.value,
+                          });
+                          recordHumanRevision(
+                            "canvas block title",
+                            `${selectedCanvasBlock.id}: ${event.target.value}`,
+                          );
+                        }}
+                      />
+                    </label>
+                    <label>
+                      <small>Copy</small>
+                      <textarea
+                        value={selectedCanvasBlock.body}
+                        aria-label="Canvas block copy"
+                        onChange={(event) => {
+                          updateCanvasBlock(selectedCanvasBlock.id, {
+                            body: event.target.value,
+                          });
+                          recordHumanRevision(
+                            "canvas block copy",
+                            `${selectedCanvasBlock.id}: ${event.target.value}`,
+                          );
+                        }}
+                      />
+                    </label>
+                    <div className="canvas-inline-controls">
+                      <span>SIZE</span>
+                      {(["half", "wide"] as CanvasBlockSpan[]).map((span) => (
+                        <button
+                          type="button"
+                          className={selectedCanvasBlock.span === span ? "active" : ""}
+                          key={span}
+                          onClick={() => {
+                            updateCanvasBlock(selectedCanvasBlock.id, { span });
+                            recordHumanRevision(
+                              "canvas block size",
+                              `${selectedCanvasBlock.title}: ${span}`,
+                            );
+                          }}
+                        >
+                          {span}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="canvas-inline-controls accent-picker">
+                      <span>INK</span>
+                      {(["coral", "sage", "gold", "ink"] as CanvasBlock["accent"][]).map(
+                        (accent) => (
+                          <button
+                            type="button"
+                            aria-label={`${accent} accent`}
+                            className={`${accent} ${
+                              selectedCanvasBlock.accent === accent ? "active" : ""
+                            }`}
+                            key={accent}
+                            onClick={() => {
+                              updateCanvasBlock(selectedCanvasBlock.id, {
+                                accent,
+                              });
+                              recordHumanRevision(
+                                "canvas block accent",
+                                `${selectedCanvasBlock.title}: ${accent}`,
+                              );
+                            }}
+                          />
+                        ),
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="remove-canvas-block"
+                      onClick={() => {
+                        const title = selectedCanvasBlock.title;
+                        removeCanvasBlock(selectedCanvasBlock.id);
+                        recordHumanRevision(
+                          "canvas blocks",
+                          `Removed ${title}`,
+                        );
+                      }}
+                    >
+                      Remove block
+                    </button>
+                  </div>
+                ) : (
+                  <p className="canvas-no-selection">
+                    Select a block on the canvas to edit it.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="add-personal-note"
+                  onClick={() => {
+                    const block = addCanvasBlock();
+                    recordHumanRevision(
+                      "canvas blocks",
+                      `Added personal note ${block.id}`,
+                    );
+                  }}
+                >
+                  + Add my own note
+                </button>
+                <p className="canvas-agent-hint">
+                  <span>TRY WITH CHATGPT</span>
+                  “I moved the schedule to the top. Shorten it and make the
+                  practical constraint more prominent.”
+                </p>
+              </aside>
+            </section>
+          ) : (
+            <>
 
           <div className="guide-title-row">
             <div>
@@ -1948,11 +2628,13 @@ export default function Home() {
               })}
             </div>
           )}
+            </>
+          )}
           <div className="guide-foot">
             <p>
               <span>Evidence policy</span>
-              Claims should point back to an inspectable source moment. Human
-              edits and agent revisions share the same visible document.
+              Canvas claims remain connected to inspectable source moments.
+              Personal notes stay visibly distinct from researched evidence.
             </p>
             <div>
               <b>{pinnedIds.length}</b> pinned moments <b>{sources.length}</b>{" "}
@@ -1969,7 +2651,7 @@ export default function Home() {
           <p>
             <b>Human direction</b>
             <span>
-              You define the question, inspect sources, edit the report, and
+              You define the question, inspect sources, compose the canvas, and
               approve what gets published.
             </span>
           </p>
@@ -1991,7 +2673,7 @@ export default function Home() {
       </section>
       <footer>
         <Brand />
-        <p>Hours of video → one report you can trust and shape.</p>
+        <p>Hours of video → one visual guide you can trust and shape.</p>
         <span>WebMCP Challenge · 2026</span>
       </footer>
     </main>

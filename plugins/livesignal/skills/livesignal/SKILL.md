@@ -1,11 +1,11 @@
 ---
 name: livesignal
-description: Research any topic across YouTube with timestamped evidence, then create, collaboratively revise, and download a shared report in LiveSignal through WebMCP. Use for video discovery, transcript research, cited summaries, editable reports, human-agent revision workflows, livestream evidence, report export, or source-moment navigation.
+description: Research any topic across YouTube with timestamped evidence, then co-create and export a shareable visual canvas in LiveSignal through WebMCP. Use for video discovery, transcript research, cited summaries, editable reports, human-agent canvas workflows, livestream evidence, visual artifact export, or source-moment navigation.
 ---
 
 # LiveSignal
 
-Use LiveSignal as a shared video research desk operated primarily through its WebMCP site tools. The human gives one request in ChatGPT, then reviews and edits the visible artifact; the agent creates the brief, discovers YouTube sources, records timed evidence, and drafts the report back into the open LiveSignal page.
+Use LiveSignal as a shared video research and creation desk operated primarily through its WebMCP site tools. The human gives one request in ChatGPT, then arranges, rewrites, and styles the visible artifact; the agent creates the brief, discovers YouTube sources, records timed evidence, drafts the report, and helps shape the canvas in the open LiveSignal page.
 
 ## Universal research workflow
 
@@ -14,10 +14,21 @@ Use LiveSignal as a shared video research desk operated primarily through its We
 3. Call `ingest_youtube_video` for each selected URL. When server captions are available, use `search_video_evidence` immediately.
 4. If ChatGPT reads captions or source moments in another browser tab, call `record_video_evidence` on LiveSignal with the source metadata and timestamped excerpts. This is the primary cross-tab path in ChatGPT's built-in browser.
 5. The optional Chrome extension is a fallback for native-caption capture or one-time user-approved realtime STT. Import its latest snapshot from the page's manual fallback control when needed.
-6. Search the imported evidence, keep timestamped excerpts, and use `write_report` to draft the visible artifact. The human can edit the same report directly.
-7. During an active collaboration, call `get_human_revisions` before a major research step and before presenting the report as final. Incorporate relevant edits with the brief or report tools, then call `acknowledge_human_revisions`. Do not claim an idle agent will wake itself; the revision stream is available in the active browser session.
-8. Revise only as requested, preserve citations and caveats, and call `publish_report` only after the human approves the result.
-9. When the human asks to save or export the result, call `download_report`. The Markdown download must retain clickable YouTube timestamp citations.
+6. Search the imported evidence, keep timestamped excerpts, and use `write_report` to create the evidence draft. Then call `create_canvas` once to turn it into a shareable visual artifact. Keep researched claims connected to evidence IDs; personal notes may remain uncited only when clearly presented as personal content.
+7. Treat the human's canvas order, block sizes, theme, and wording as intentional. During active collaboration, call `get_canvas_state` and `get_human_revisions` before making a canvas change. Use the smallest scoped tool—normally `update_canvas_block`, `add_canvas_block`, or `reorder_canvas_blocks`—instead of recreating the whole canvas.
+8. React to the human's revision in context: explain what changed, protect citation meaning, shorten copy to fit when requested, or flag a missing source. Then call `acknowledge_human_revisions`. Do not claim an idle agent will wake itself; the revision stream is available while the agent is active in the browser session.
+9. Call `set_canvas_theme` only for a human-requested or clearly relevant visual direction. Never replace the complete canvas after the human has edited it unless they explicitly ask to start over.
+10. Revise only as requested, preserve citations and caveats, and call `publish_report` only after the human approves the result.
+11. When the human asks for the shareable result, call `download_canvas_png`. Use `download_report` for the underlying Markdown research; it must retain clickable YouTube timestamp citations.
+
+## Canvas collaboration contract
+
+- Use `get_canvas_state` to inspect the same visible composition the human sees.
+- Preserve human-authored notes and distinguish them from evidence-backed claims.
+- Keep layout edits local. A request to shorten one card does not authorize rewriting other cards.
+- If moving or rewriting a claim would change its meaning, preserve its evidence IDs and verify the supporting excerpt first.
+- Treat pending human revisions as collaboration events, not instructions to regenerate from scratch.
+- Prefer a small number of visually distinct blocks with concise copy over placing the full transcript or report on the canvas.
 
 ## Livestream adapter workflow
 
@@ -57,3 +68,4 @@ Use this fallback only on a page where the LiveSignal extension is active. Do no
 - “The stream mentions the release date at 12:43: ‘…’. Want me to open that moment?”
 - “This stream has no native transcript. Approve LiveSignal once for this tab; after that I can listen and search streams here without another click.”
 - “I imported three videos about solid-state batteries, found five timestamped passages about manufacturing cost, and drafted the editable comparison in LiveSignal.”
+- “I kept your new layout, shortened the preparation card to fit, and preserved its two source moments. The canvas is ready for your review or PNG export.”
