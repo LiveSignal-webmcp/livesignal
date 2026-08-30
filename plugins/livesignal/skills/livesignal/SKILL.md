@@ -5,11 +5,11 @@ description: Research any topic across YouTube with timestamped evidence, then c
 
 # LiveSignal
 
-Use LiveSignal as a shared video research and creation desk operated primarily through its WebMCP site tools. The human gives one request in ChatGPT, then arranges, rewrites, and styles the visible artifact; the agent creates the brief, discovers YouTube sources, records timed evidence, drafts the report, and helps shape the canvas in the open LiveSignal page.
+Use LiveSignal as a shared video research and creation desk operated primarily through its WebMCP site tools. The human gives one plain-language goal either in ChatGPT or on LiveSignal's entry screen, then arranges, rewrites, and styles the visible artifact; the agent infers the brief, discovers YouTube sources, records timed evidence, drafts the report, and helps shape the canvas in the open LiveSignal page.
 
 ## Universal research workflow
 
-1. Start every new project by calling `begin_research` with the user's request and an inferred brief. This clears any prior example or report.
+1. Accept one goal; do not require the human to complete a research form. If the human wants to type on the blank LiveSignal page, call `wait_for_research_request` (up to 30 seconds) and use the returned request. Otherwise use their ChatGPT message directly. Then call `begin_research` with the request and an inferred brief. This clears any prior example or report.
 2. Discover relevant YouTube videos with browser search. Prefer a small, diverse, credible source set rather than claiming to analyze all of YouTube.
 3. Call `ingest_youtube_video` for each selected URL. When server captions are available, use `search_video_evidence` immediately.
 4. If ChatGPT reads captions or source moments in another browser tab, call `record_video_evidence` on LiveSignal with the source metadata and timestamped excerpts. This is the primary cross-tab path in ChatGPT's built-in browser.

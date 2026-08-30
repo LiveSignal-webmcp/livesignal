@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render() {
@@ -15,7 +16,7 @@ async function render() {
   );
 }
 
-test("server-renders a clean universal video research workspace", async () => {
+test("server-renders a focused one-request consumer entry", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
@@ -25,39 +26,36 @@ test("server-renders a clean universal video research workspace", async () => {
     html,
     /<title>LiveSignal — research anything across YouTube<\/title>/i,
   );
-  assert.match(html, /Ask widely/);
-  assert.match(html, /Watch selectively/);
-  assert.match(html, /Ask ChatGPT to research anything across video/i);
-  assert.match(html, /One request. The agent operates this page/i);
-  assert.match(html, /Preview China food run/);
-  assert.match(html, /Import a real YouTube video/);
-  assert.match(html, /Import latest extension evidence/);
-  assert.match(html, /Import a complete browser-agent run/);
-  assert.match(html, /Agent result JSON/);
-  assert.match(html, /Apply agent result/);
-  assert.match(html, /Research brief/);
-  assert.match(html, /Live shared brief/i);
-  assert.match(html, /Research request/);
-  assert.match(html, /Human → agent/i);
-  assert.match(html, /Source &amp; evidence desk/);
-  assert.match(html, /Creation canvas/);
-  assert.match(html, /Human composes · agent reacts/);
-  assert.match(html, /Visual canvas/);
-  assert.match(html, /Evidence draft/);
-  assert.match(html, /Download PNG/i);
-  assert.match(html, /Human ↔ agent loop/i);
-  assert.match(html, /Comment for agent/i);
-  assert.match(html, /This card/i);
-  assert.match(html, /Whole canvas/i);
-  assert.match(html, /Send to agent/i);
-  assert.match(html, /Agent inbox/i);
-  assert.match(html, /Download \.md/i);
-  assert.match(html, /Waiting for ChatGPT/i);
-  assert.match(html, /The shared artifact starts here/i);
+  assert.match(html, /What do you want to/);
+  assert.match(html, /Tell LiveSignal your goal/i);
+  assert.match(html, /What are you trying to accomplish/i);
+  assert.match(html, /Build my plan/i);
+  assert.match(html, /Plan a food trip/);
+  assert.match(html, /Learn a skill/);
+  assert.match(html, /Cook something/);
+  assert.match(html, /Compare options/);
+  assert.match(html, /Say what you want/);
+  assert.match(html, /Agent researches video/);
+  assert.match(html, /You shape the result/);
+  assert.match(html, /Share something useful/);
+  assert.match(html, /See a finished food-planning example/i);
+  assert.match(html, /Connecting agent/i);
+  assert.doesNotMatch(html, /Manual fallback controls/);
+  assert.doesNotMatch(html, /Must cover/);
+  assert.doesNotMatch(html, /Comment for agent/);
+  assert.doesNotMatch(html, /Download PNG/i);
   assert.doesNotMatch(html, /Dan dan noodles/);
-  assert.match(html, /The page stays in the conversation/);
   assert.doesNotMatch(
     html,
     /Your site is taking shape|Building your site|codex-preview/i,
   );
+});
+
+test("exposes the page-to-agent request and canvas comment wait tools", async () => {
+  const page = await readFile(
+    new URL("../app/page.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(page, /"wait_for_research_request"/);
+  assert.match(page, /"wait_for_agent_comment"/);
 });

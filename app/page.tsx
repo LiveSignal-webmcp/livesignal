@@ -129,7 +129,29 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 31;
+const TOOL_COUNT = 32;
+const ENTRY_SUGGESTIONS = [
+  {
+    label: "Plan a food trip",
+    prompt:
+      "Build a must-try food plan for my first trip to China. I love spicy noodles, avoid shellfish, and want advice from several YouTube creators.",
+  },
+  {
+    label: "Learn a skill",
+    prompt:
+      "Build a practical beginner plan for learning street photography from trusted YouTube creators, with exercises I can follow this week.",
+  },
+  {
+    label: "Cook something",
+    prompt:
+      "Find the best YouTube advice for making restaurant-quality ramen at home and turn it into a clear recipe card for a first-time cook.",
+  },
+  {
+    label: "Compare options",
+    prompt:
+      "Compare the best compact cameras for travel using recent YouTube reviews and build a source-backed decision guide.",
+  },
+];
 const AGENT_COMMENT_KINDS: Array<{
   id: AgentCommentKind;
   label: string;
@@ -238,6 +260,9 @@ export default function Home() {
   const [agentCommentScope, setAgentCommentScope] =
     useState<"block" | "canvas">("block");
   const [agentListening, setAgentListening] = useState(false);
+  const [agentListeningForRequest, setAgentListeningForRequest] =
+    useState(false);
+  const [entryPrompt, setEntryPrompt] = useState("");
   const [canvasBlocks, setCanvasBlocks] = useState<CanvasBlock[]>([]);
   const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>("notebook");
   const [selectedCanvasId, setSelectedCanvasId] = useState("");
@@ -292,6 +317,12 @@ export default function Home() {
       ).slice(-4).reverse(),
     [agentComments, selectedCanvasBlock?.id],
   );
+  const workspaceActive =
+    Boolean(goal) ||
+    sources.length > 0 ||
+    reportSections.length > 0 ||
+    canvasBlocks.length > 0 ||
+    runPhase !== "ready";
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const live = useRef({
@@ -685,6 +716,26 @@ export default function Home() {
     ]);
     setActivity("ChatGPT is discovering relevant videos");
     window.location.hash = "workspace";
+  }
+
+  function submitEntryRequest() {
+    const cleanRequest = entryPrompt.trim();
+    if (!cleanRequest) return;
+    const request = {
+      request: cleanRequest,
+      createdAt: new Date().toISOString(),
+      outputFormat: EMPTY_BRIEF.outputFormat,
+    };
+    startResearch(cleanRequest);
+    setEntryPrompt("");
+    setActivity(
+      agentListeningForRequest
+        ? "Your agent received the request"
+        : "Request ready · your active agent can begin",
+    );
+    window.dispatchEvent(
+      new CustomEvent("livesignal:research-request", { detail: request }),
+    );
   }
 
   function loadExample() {
@@ -1206,6 +1257,68 @@ export default function Home() {
         properties: {
           all: { type: "boolean" },
           revisionIds: { type: "array", items: { type: "string" } },
+        },
+      },
+    );
+    tool(
+      "wait_for_research_request",
+      "Waits for the human to submit a new one-line goal from LiveSignal's consumer entry screen. Use after opening a blank LiveSignal page and telling the human you are ready for their request.",
+      async (input) => {
+        if (
+          live.current.goal &&
+          live.current.runPhase === "discovering" &&
+          live.current.sources.length === 0
+        ) {
+          return {
+            status: "request",
+            request: live.current.goal,
+            outputFormat: live.current.brief.outputFormat,
+          };
+        }
+        const requestedMs = Number(input.timeoutMs ?? 30000);
+        const timeoutMs = Math.max(1000, Math.min(requestedMs, 45000));
+        setAgentListeningForRequest(true);
+        setActivity("Your agent is ready for one request");
+        return await new Promise((resolve) => {
+          let settled = false;
+          const finish = (result: Record<string, unknown>) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            window.removeEventListener(
+              "livesignal:research-request",
+              onRequest as EventListener,
+            );
+            setAgentListeningForRequest(false);
+            resolve(result);
+          };
+          const onRequest = (event: Event) => {
+            const detail = (
+              event as CustomEvent<{
+                request: string;
+                createdAt: string;
+                outputFormat: string;
+              }>
+            ).detail;
+            finish({ status: "request", ...detail });
+          };
+          const timeoutId = window.setTimeout(
+            () => finish({ status: "idle", waitedMs: timeoutMs }),
+            timeoutMs,
+          );
+          window.addEventListener(
+            "livesignal:research-request",
+            onRequest as EventListener,
+          );
+        });
+      },
+      {
+        type: "object",
+        properties: {
+          timeoutMs: {
+            type: "number",
+            description: "Wait duration in milliseconds, capped at 45000.",
+          },
         },
       },
     );
@@ -1959,83 +2072,127 @@ export default function Home() {
     <main>
       <nav className="topbar">
         <Brand />
-        <div className="nav-links">
-          <a href="#brief">Brief</a>
-          <a href="#sources">Sources</a>
-          <a href="#report">Create</a>
-          <a href="/livesignal-extension-v0.5.0.zip" download>
-            Extension
-          </a>
-        </div>
+        {workspaceActive ? (
+          <div className="nav-links">
+            <a href="#brief">Direction</a>
+            <a href="#sources">Research</a>
+            <a href="#report">Canvas</a>
+          </div>
+        ) : (
+          <span className="consumer-nav-line">VIDEO KNOWLEDGE, MADE USEFUL</span>
+        )}
         <div className={`mcp-status ${mcp}`}>
           <i />
           {mcp === "registered"
-            ? `${TOOL_COUNT} WebMCP tools ready`
+            ? workspaceActive
+              ? `${TOOL_COUNT} WebMCP tools ready`
+              : "Agent ready"
             : mcp === "unavailable"
-              ? "Open in WebMCP browser"
+              ? "Open with ChatGPT"
               : mcp === "error"
                 ? "WebMCP unavailable"
-                : "Checking WebMCP"}
+                : "Connecting agent"}
         </div>
       </nav>
 
-      <header className="project-hero" id="top">
-        <div className="hero-kicker">
-          UNIVERSAL VIDEO RESEARCH / PERSON + AGENT
-        </div>
-        <div className="hero-grid">
-          <div>
-            <p className="issue-label">TURN VIDEO INTO WORKING KNOWLEDGE</p>
+      {!workspaceActive && (
+        <header className="consumer-hero" id="top">
+          <div className="consumer-hero-copy">
+            <span className="consumer-eyebrow">LIVE SIGNAL · HUMAN + AGENT</span>
             <h1>
-              Ask widely.
+              What do you
               <br />
-              <em>Watch selectively.</em>
+              want to <em>do?</em>
             </h1>
-          </div>
-          <div className="hero-copy">
             <p>
-              Research any subject across YouTube, collect timestamped evidence,
-              and shape it with your agent into something useful.
+              Tell LiveSignal your goal. Your agent researches the relevant
+              video internet and builds a beautiful plan you can edit and share.
             </p>
-            <div className="hero-proof">
-              <b>Any</b>
-              <span>research topic</span>
-              <b>1</b>
-              <span>shared workspace</span>
-              <b>{TOOL_COUNT}</b>
-              <span>WebMCP tools</span>
+          </div>
+
+          <div className="consumer-entry-card">
+            <div className="consumer-entry-topline">
+              <span>ONE REQUEST</span>
+              <i className={agentListeningForRequest ? "listening" : ""}>
+                {agentListeningForRequest
+                  ? "● YOUR AGENT IS LISTENING"
+                  : "NO SETUP FORM"}
+              </i>
+            </div>
+            <label>
+              <span>What are you trying to accomplish?</span>
+              <textarea
+                value={entryPrompt}
+                onChange={(event) => setEntryPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                    event.preventDefault();
+                    submitEntryRequest();
+                  }
+                }}
+                placeholder="Plan my first food trip to China. I love spicy noodles and avoid shellfish…"
+                aria-label="What do you want to do?"
+              />
+            </label>
+            <div className="consumer-entry-action">
+              <p>
+                Your agent will find useful videos, keep timestamped proof, and
+                return with an editable visual plan.
+              </p>
+              <button
+                type="button"
+                disabled={!entryPrompt.trim()}
+                onClick={submitEntryRequest}
+              >
+                <span>Build my plan</span>
+                <b>→</b>
+              </button>
+            </div>
+            <div className="consumer-suggestions" aria-label="Example goals">
+              <span>TRY AN IDEA</span>
+              {ENTRY_SUGGESTIONS.map((suggestion) => (
+                <button
+                  type="button"
+                  key={suggestion.label}
+                  onClick={() => setEntryPrompt(suggestion.prompt)}
+                >
+                  {suggestion.label}
+                </button>
+              ))}
             </div>
           </div>
-        </div>
-        <div className="route-line">
-          <span>DISCOVER</span>
-          <i />
-          <span>VERIFY</span>
-          <i />
-          <span>CREATE</span>
-        </div>
-        <div className="agent-entry">
-          <div className="agent-entry-mark">CHATGPT</div>
-          <div>
-            <span>ONE REQUEST. THE AGENT OPERATES THIS PAGE.</span>
-            <p>
-              “Research the best beginner advice for growing tomatoes on a
-              balcony. Compare three YouTube sources and build a cited visual guide in
-              LiveSignal.”
-            </p>
-          </div>
-          <ol>
-            <li>Open this page in ChatGPT’s browser</li>
-            <li>Ask once in the conversation</li>
-            <li>Watch this workspace fill itself</li>
-          </ol>
-          <button type="button" onClick={loadExample}>
-            Preview China food run →
-          </button>
-        </div>
-      </header>
 
-      <section className="workspace-shell" id="workspace">
+          <div className="consumer-route">
+            <div>
+              <b>01</b>
+              <span>Say what you want</span>
+            </div>
+            <i />
+            <div>
+              <b>02</b>
+              <span>Agent researches video</span>
+            </div>
+            <i />
+            <div>
+              <b>03</b>
+              <span>You shape the result</span>
+            </div>
+            <i />
+            <div>
+              <b>04</b>
+              <span>Share something useful</span>
+            </div>
+          </div>
+
+          <button className="consumer-example" type="button" onClick={loadExample}>
+            <span>NOT READY TO START?</span>
+            See a finished food-planning example <b>↗</b>
+          </button>
+        </header>
+      )}
+
+      {workspaceActive && (
+        <section className="workspace-shell" id="workspace">
         <div className="workspace-head">
           <div>
             <span className="section-no">
@@ -2123,20 +2280,25 @@ export default function Home() {
               title="Research brief"
               sub="Human direction"
             />
-            <h3>
-              {goal
-                ? "Shape the brief with the agent."
-                : "One prompt becomes the brief."}
-            </h3>
-            <div className="brief-collaboration-note">
-              <span>LIVE SHARED BRIEF</span>
-              <p>
-                Edit any field. The current value and its revision become
-                available to the active agent immediately.
-              </p>
+            <h3>Your goal is enough.</h3>
+            <div className="brief-goal-card">
+              <span>YOUR REQUEST</span>
+              <p>{goal}</p>
             </div>
-            <div className="brief-live-editor">
-              <label className="brief-field research-request-field">
+            <details className="brief-refine">
+              <summary>
+                <span>Refine the request</span>
+                <small>Optional</small>
+              </summary>
+              <div className="brief-collaboration-note">
+                <span>LIVE SHARED BRIEF</span>
+                <p>
+                  Add detail only when it matters. Every edit is available to
+                  the active agent immediately.
+                </p>
+              </div>
+              <div className="brief-live-editor">
+                <label className="brief-field research-request-field">
                 <span>Research request</span>
                 <textarea
                   value={goal}
@@ -2148,8 +2310,8 @@ export default function Home() {
                   placeholder="Waiting for ChatGPT to begin a project…"
                   aria-label="Research request"
                 />
-              </label>
-              <label className="brief-field">
+                </label>
+                <label className="brief-field">
                 <span>Must cover</span>
                 <textarea
                   value={brief.mustCover}
@@ -2163,8 +2325,8 @@ export default function Home() {
                   placeholder="Questions, comparisons, people, places, or claims"
                   aria-label="Must cover"
                 />
-              </label>
-              <label className="brief-field">
+                </label>
+                <label className="brief-field">
                 <span>Constraints</span>
                 <textarea
                   value={brief.constraints}
@@ -2178,8 +2340,8 @@ export default function Home() {
                   placeholder="Exclude, prioritise, recency, budget, point of view…"
                   aria-label="Research constraints"
                 />
-              </label>
-              <label className="brief-field">
+                </label>
+                <label className="brief-field">
                 <span>Deliverable</span>
                 <input
                   value={brief.outputFormat}
@@ -2192,17 +2354,15 @@ export default function Home() {
                   }}
                   aria-label="Research deliverable"
                 />
-              </label>
-            </div>
+                </label>
+              </div>
+            </details>
             <div className="brief-prompt">
-              <span>HUMAN ROLE</span>
+              <span>YOUR ROLE</span>
               <p>
-                Review the agent’s choices, inspect source moments, and edit the
-                finished canvas. Research setup is optional.
+                Let the agent do the watching. You inspect, shape, and approve
+                what becomes part of the final plan.
               </p>
-              <button type="button" onClick={loadExample}>
-                Or load the example
-              </button>
             </div>
           </aside>
 
@@ -2308,12 +2468,11 @@ export default function Home() {
 
             {sources.length === 0 ? (
               <div className="empty-state source-empty">
-                <span>WAITING FOR CHATGPT</span>
-                <h3>Sources will arrive here automatically.</h3>
+                <span>AGENT RESEARCHING</span>
+                <h3>Your request is already in motion.</h3>
                 <p>
-                  Ask once in the ChatGPT conversation. The agent will discover
-                  videos, verify source moments, and use LiveSignal’s page tools
-                  to build this evidence desk.
+                  Your active agent can now discover useful videos, verify exact
+                  moments, and return its evidence directly to this shared desk.
                 </p>
               </div>
             ) : (
@@ -2434,6 +2593,7 @@ export default function Home() {
           </section>
         </div>
 
+        {(reportSections.length > 0 || canvasBlocks.length > 0) && (
         <section className="guide-panel" id="report">
           <div className="guide-toolbar">
             <PanelLabel
@@ -3076,7 +3236,9 @@ export default function Home() {
             </div>
           </div>
         </section>
-      </section>
+        )}
+        </section>
+      )}
 
       <section className="challenge-proof">
         <p className="section-no">WHY WEBMCP</p>
