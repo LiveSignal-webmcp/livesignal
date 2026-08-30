@@ -5,16 +5,17 @@ description: Research any topic across YouTube with timestamped evidence, then c
 
 # LiveSignal
 
-Use LiveSignal as a shared video research desk. The human defines and edits the artifact; the agent discovers YouTube sources, imports captions or browser evidence, searches timed transcript segments, and drafts the visible report.
+Use LiveSignal as a shared video research desk operated primarily through its WebMCP site tools. The human gives one request in ChatGPT, then reviews and edits the visible artifact; the agent creates the brief, discovers YouTube sources, records timed evidence, and drafts the report back into the open LiveSignal page.
 
 ## Universal research workflow
 
-1. On the Companion, call `set_research_goal` with the user's objective. Use `clearExample: true` when starting a project unrelated to the loaded China food example.
+1. Start every new project by calling `begin_research` with the user's request and an inferred brief. This clears any prior example or report.
 2. Discover relevant YouTube videos with browser search. Prefer a small, diverse, credible source set rather than claiming to analyze all of YouTube.
 3. Call `ingest_youtube_video` for each selected URL. When server captions are available, use `search_video_evidence` immediately.
-4. If the result says browser evidence is required, open the video in the paired tab. Use native captions when available or the one-time user-approved realtime STT path. Return to the Companion and call `import_browser_evidence`.
-5. Search the imported evidence, keep timestamped excerpts, and use `write_report` to draft the visible artifact. The human can edit the same report directly.
-6. Revise only as requested, preserve citations and caveats, and call `publish_guide` only after the human approves the result.
+4. If ChatGPT reads captions or source moments in another browser tab, call `record_video_evidence` on LiveSignal with the source metadata and timestamped excerpts. This is the primary cross-tab path in ChatGPT's built-in browser.
+5. The optional Chrome extension is a fallback for native-caption capture or one-time user-approved realtime STT. Import its latest snapshot from the page's manual fallback control when needed.
+6. Search the imported evidence, keep timestamped excerpts, and use `write_report` to draft the visible artifact. The human can edit the same report directly.
+7. Revise only as requested, preserve citations and caveats, and call `publish_report` only after the human approves the result.
 
 ## Livestream adapter workflow
 
@@ -47,7 +48,7 @@ Use this fallback only on a page where the LiveSignal extension is active. Do no
 - Chrome requires one user gesture before tab audio capture. An agent cannot bypass that boundary. After approval, continue autonomously without asking again while the same tab remains enabled.
 - Realtime capture is scoped to the approved tab and continues while that capture remains active. Evidence resets when the agent switches streams so transcript lines cannot leak across sources. Watch rules are page-local and end when the page refreshes or closes.
 - Twitch supports player state, realtime transcription after tab approval, and timestamp navigation when available.
-- The China food workspace is the loaded example project. Treat its labelled prototype excerpts as demo data until verified; imported caption and browser evidence is the real engine path.
+- The China food workspace is an optional example, never the initial state. Treat its labelled prototype excerpts as demo data until verified; imported caption and agent-recorded evidence is the real engine path.
 
 ## Good responses
 

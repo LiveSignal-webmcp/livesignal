@@ -1,4 +1,4 @@
 interface:
   display_name: "LiveSignal"
-  short_description: "Research livestreams with evidence"
-  default_prompt: "Find a relevant livestream and tell me what it is discussing, with timestamped evidence."
+  short_description: "Research videos into cited reports"
+  default_prompt: "Research this topic across YouTube and build an editable LiveSignal report with timestamped evidence."

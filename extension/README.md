@@ -38,14 +38,14 @@ YouTube preroll and midroll speech is discarded in the background before it can 
 
 The extension publishes a same-world API through `window.LiveSignalAgent.call(name, input)` and a read-only JSON `<output>` at `#livesignal-agent-state`. Codex browser control should read the DOM output because browser automation can run in an isolated JavaScript world. This is a compatibility layer, not a separate backend or evidence source.
 
-On `livesignal-chi.vercel.app`, `companion-bridge.js` imports the latest saved evidence snapshot when the page or agent calls `import_browser_evidence`.
+On `livesignal-chi.vercel.app`, `companion-bridge.js` imports the latest saved evidence snapshot from the page's optional manual fallback control. ChatGPT's built-in browser instead uses the Companion's `record_video_evidence` WebMCP tool directly.
 
 The intended flow is:
 
 1. A person chooses **Enable for this tab** once.
-2. Codex searches and navigates in that same tab.
-3. Codex prefers WebMCP tools. If its browser runtime cannot discover them, it reads the committed evidence snapshot and uses browser control for navigation.
-4. LiveSignal returns transcript evidence and timestamps; Codex verifies the spoken topic before answering.
+2. A browser agent searches and navigates in that same tab.
+3. The agent prefers WebMCP tools. If its browser runtime cannot discover them, it reads the committed evidence snapshot and uses browser control for navigation.
+4. LiveSignal returns transcript evidence and timestamps; the agent verifies the spoken topic before answering.
 
 Realtime transcription requires the deployed LiveSignal Companion to have an `ELEVENLABS_API_KEY` server environment variable. The key is never bundled with the extension: the Companion mints a single-use Scribe token for each listening session.
 

@@ -52,13 +52,13 @@
     if (webmcp === "error") {
       badge.textContent = "● LiveSignal · browser bridge ready";
       badge.title =
-        "The Codex browser-control bridge is ready, but one or more WebMCP tools could not register.";
+        "The browser-agent bridge is ready, but one or more WebMCP tools could not register.";
       return;
     }
     if (webmcp !== "registered") {
       badge.textContent = "● LiveSignal · agent bridge ready";
       badge.title =
-        "Codex browser control can use LiveSignal now. Enable WebMCP for native semantic tool discovery.";
+        "A browser agent can use LiveSignal now. Enable WebMCP for native semantic tool discovery.";
       return;
     }
     badge.textContent = "● LiveSignal active";

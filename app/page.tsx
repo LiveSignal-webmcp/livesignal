@@ -41,6 +41,20 @@ type ReportSection = {
   evidenceIds: string[];
 };
 
+type RunPhase =
+  | "ready"
+  | "discovering"
+  | "extracting"
+  | "synthesizing"
+  | "review"
+  | "published";
+
+type AgentEvent = {
+  id: string;
+  label: string;
+  detail: string;
+};
+
 type ModelDocument = Document & {
   modelContext?: {
     registerTool: (tool: {
@@ -65,6 +79,12 @@ const EXAMPLE_BRIEF: ResearchBrief = {
 };
 
 const TOOL_COUNT = 16;
+const PHASES: Array<{ id: RunPhase; label: string }> = [
+  { id: "discovering", label: "Discover" },
+  { id: "extracting", label: "Extract" },
+  { id: "synthesizing", label: "Synthesize" },
+  { id: "review", label: "Review" },
+];
 
 function timestampUrl(source: ResearchSource, seconds = 0) {
   const base = source.url || videoUrl(source);
@@ -118,6 +138,8 @@ export default function Home() {
   const [reportOverview, setReportOverview] = useState("");
   const [reportSections, setReportSections] = useState<ReportSection[]>([]);
   const [activity, setActivity] = useState("Workspace ready for a new topic");
+  const [runPhase, setRunPhase] = useState<RunPhase>("ready");
+  const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [published, setPublished] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [ingestStatus, setIngestStatus] = useState<
@@ -152,6 +174,8 @@ export default function Home() {
     reportOverview,
     reportSections,
     published,
+    runPhase,
+    agentEvents,
   });
 
   useEffect(() => {
@@ -165,6 +189,8 @@ export default function Home() {
       reportOverview,
       reportSections,
       published,
+      runPhase,
+      agentEvents,
     };
   }, [
     goal,
@@ -176,7 +202,16 @@ export default function Home() {
     reportOverview,
     reportSections,
     published,
+    runPhase,
+    agentEvents,
   ]);
+
+  function addAgentEvent(label: string, detail: string) {
+    setAgentEvents((current) => [
+      ...current.slice(-5),
+      { id: crypto.randomUUID(), label, detail },
+    ]);
+  }
 
   function startResearch(nextGoal = goal) {
     const cleanGoal = nextGoal.trim();
@@ -193,8 +228,16 @@ export default function Home() {
     setReportSections([]);
     setPublished(false);
     setIngestError("");
-    setActivity(`New research started · ${cleanGoal}`);
-    window.location.hash = "brief";
+    setRunPhase("discovering");
+    setAgentEvents([
+      {
+        id: crypto.randomUUID(),
+        label: "Request accepted",
+        detail: cleanGoal,
+      },
+    ]);
+    setActivity("ChatGPT is discovering relevant videos");
+    window.location.hash = "workspace";
   }
 
   function loadExample() {
@@ -215,8 +258,16 @@ export default function Home() {
     setReportSections(example.sections);
     setPublished(false);
     setIngestError("");
+    setRunPhase("review");
+    setAgentEvents([
+      {
+        id: crypto.randomUUID(),
+        label: "Example completed",
+        detail: "5 sources · 6 cited report sections",
+      },
+    ]);
     setActivity("China food example loaded · replace it with any topic");
-    window.location.hash = "brief";
+    window.location.hash = "workspace";
   }
 
   function openYouTubeSearch(query = searchQuery || goal) {
@@ -224,6 +275,8 @@ export default function Home() {
     if (!cleanQuery) return { ok: false, error: "A search query is required." };
     setSearchQuery(cleanQuery);
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQuery)}`;
+    setRunPhase("discovering");
+    addAgentEvent("Searching YouTube", cleanQuery);
     setActivity(`YouTube search opened · ${cleanQuery}`);
     window.open(url, "_blank", "noopener,noreferrer");
     return { ok: true, query: cleanQuery, url };
@@ -234,6 +287,8 @@ export default function Home() {
     if (!normalized) throw new Error("Paste a public YouTube URL first.");
     setIngestStatus("loading");
     setIngestError("");
+    setRunPhase("extracting");
+    addAgentEvent("Opening source", normalized);
     const response = await fetch("/api/youtube/ingest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -283,6 +338,12 @@ export default function Home() {
         ? `Imported ${segments.length} timestamped caption segments`
         : "Video found · browser evidence needed for captions",
     );
+    addAgentEvent(
+      result.transcript.available ? "Evidence extracted" : "Source connected",
+      result.transcript.available
+        ? `${segments.length} timestamped caption segments`
+        : "Waiting for browser-caption evidence",
+    );
     window.location.hash = "sources";
     return result;
   }
@@ -290,6 +351,7 @@ export default function Home() {
   async function importBrowserEvidence() {
     setIngestStatus("loading");
     setIngestError("");
+    setRunPhase("extracting");
     const requestId = crypto.randomUUID();
     const snapshot = await new Promise<Record<string, unknown> | null>(
       (resolve, reject) => {
@@ -366,6 +428,10 @@ export default function Home() {
     ]);
     if (segments[0]) setFocusEvidenceId(segments[0].id);
     setIngestStatus("ready");
+    addAgentEvent(
+      "Browser evidence imported",
+      `${segments.length} timestamped segments`,
+    );
     setActivity(`Imported ${segments.length} browser evidence segments`);
     window.location.hash = "sources";
     return {
@@ -376,6 +442,71 @@ export default function Home() {
         segments,
       },
     };
+  }
+
+  function recordAgentEvidence(input: Record<string, unknown>) {
+    const sourceInput = (input.source ?? {}) as Record<string, unknown>;
+    const url = String(sourceInput.url ?? "").trim();
+    const title = String(sourceInput.title ?? "Researched video").trim();
+    if (!url) return { ok: false, error: "A source URL is required." };
+    let videoId = String(sourceInput.videoId ?? "").trim();
+    if (!videoId) {
+      try {
+        const parsed = new URL(url);
+        videoId =
+          parsed.searchParams.get("v") ??
+          parsed.pathname.split("/").filter(Boolean).at(-1) ??
+          `agent-${Date.now()}`;
+      } catch {
+        videoId = `agent-${Date.now()}`;
+      }
+    }
+    const sourceId = String(sourceInput.id ?? videoId);
+    const segments = (
+      Array.isArray(input.evidence)
+        ? (input.evidence as Array<Record<string, unknown>>)
+        : []
+    )
+      .map((item, index): EvidenceItem => ({
+        id: String(item.id ?? `${sourceId}-agent-${index}`),
+        sourceId,
+        text: String(item.text ?? "").trim(),
+        seconds: Number(item.seconds ?? 0),
+        durationSeconds: Number(item.durationSeconds ?? 0),
+        timestamp: String(item.timestamp ?? "0:00"),
+        note: item.note === undefined ? undefined : String(item.note),
+      }))
+      .filter((item) => item.text);
+    const source: ResearchSource = {
+      id: sourceId,
+      videoId,
+      url,
+      title,
+      creator: String(sourceInput.creator ?? "YouTube creator"),
+      city: "Agent research",
+      duration: "BROWSER",
+      relevance: String(
+        sourceInput.relevance ??
+          "Selected and verified by ChatGPT in the browser",
+      ),
+      transcriptCount: segments.length,
+    };
+    setSources((current) => [
+      ...current.filter((item) => item.id !== source.id),
+      source,
+    ]);
+    setEvidence((current) => [
+      ...current.filter((item) => item.sourceId !== source.id),
+      ...segments,
+    ]);
+    if (segments[0]) setFocusEvidenceId(segments[0].id);
+    setRunPhase("extracting");
+    addAgentEvent(
+      "Agent evidence recorded",
+      `${title} · ${segments.length} timestamped moments`,
+    );
+    setActivity(`ChatGPT added ${segments.length} evidence moments`);
+    return { ok: true, source, evidence: segments };
   }
 
   function pinEvidence(id: string) {
@@ -451,18 +582,41 @@ export default function Home() {
       () => live.current,
     );
     tool(
-      "set_research_goal",
-      "Starts a clean video-research workspace for any topic. This visibly clears the previous project.",
+      "begin_research",
+      "Start here for a new user request. Creates a clean LiveSignal project, records the agent-prepared brief, and returns the autonomous video-research workflow.",
       (input) => {
-        const nextGoal = String(input.goal ?? "").trim();
-        if (!nextGoal) return { ok: false, error: "A goal is required." };
+        const nextGoal = String(input.request ?? "").trim();
+        if (!nextGoal)
+          return { ok: false, error: "A research request is required." };
         startResearch(nextGoal);
-        return { ok: true, goal: nextGoal };
+        const nextBrief = {
+          mustCover: String(input.mustCover ?? ""),
+          constraints: String(input.constraints ?? ""),
+          outputFormat: String(
+            input.outputFormat ?? "Concise, evidence-backed report",
+          ),
+        };
+        setBrief(nextBrief);
+        return {
+          ok: true,
+          request: nextGoal,
+          brief: nextBrief,
+          next: [
+            "Use open_youtube_search to discover credible candidate videos.",
+            "Use ingest_youtube_video on the strongest sources.",
+            "Search and pin timestamped evidence, then call write_report.",
+          ],
+        };
       },
       {
         type: "object",
-        properties: { goal: { type: "string" } },
-        required: ["goal"],
+        properties: {
+          request: { type: "string" },
+          mustCover: { type: "string" },
+          constraints: { type: "string" },
+          outputFormat: { type: "string" },
+        },
+        required: ["request"],
       },
     );
     tool(
@@ -512,9 +666,42 @@ export default function Home() {
       },
     );
     tool(
-      "import_browser_evidence",
-      "Imports the latest caption or realtime-STT evidence collected by the user-authorized LiveSignal browser extension.",
-      async () => importBrowserEvidence(),
+      "record_video_evidence",
+      "Writes a video and timestamped evidence researched in another browser tab back into LiveSignal. Use this when ChatGPT reads captions or source moments directly, especially when server transcript import is unavailable.",
+      (input) => recordAgentEvidence(input),
+      {
+        type: "object",
+        properties: {
+          source: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              videoId: { type: "string" },
+              url: { type: "string" },
+              title: { type: "string" },
+              creator: { type: "string" },
+              relevance: { type: "string" },
+            },
+            required: ["url", "title"],
+          },
+          evidence: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                text: { type: "string" },
+                timestamp: { type: "string" },
+                seconds: { type: "number" },
+                durationSeconds: { type: "number" },
+                note: { type: "string" },
+              },
+              required: ["text", "timestamp", "seconds"],
+            },
+          },
+        },
+        required: ["source", "evidence"],
+      },
     );
     tool(
       "search_video_evidence",
@@ -526,7 +713,12 @@ export default function Home() {
             item.text.toLowerCase().includes(query.toLowerCase()),
           )
           .slice(0, 50);
+        setRunPhase("synthesizing");
         setEvidenceQuery(query);
+        addAgentEvent(
+          "Evidence searched",
+          `${matches.length} matches for “${query}”`,
+        );
         setActivity(`Agent found ${matches.length} evidence matches`);
         return { query, matches };
       },
@@ -661,6 +853,11 @@ export default function Home() {
         setReportOverview(nextOverview);
         setReportSections(nextSections);
         setPublished(false);
+        setRunPhase("review");
+        addAgentEvent(
+          "Report delivered",
+          `${nextSections.length} editable sections with source proof`,
+        );
         setActivity("Agent drafted the editable report");
         window.location.hash = "report";
         return {
@@ -712,6 +909,11 @@ export default function Home() {
           setReportSections(next);
         }
         setPublished(false);
+        setRunPhase("review");
+        addAgentEvent(
+          "Revision applied",
+          String(input.instruction ?? "Report improved"),
+        );
         setActivity(
           `Agent revision applied · ${String(input.instruction ?? "report improved")}`,
         );
@@ -756,6 +958,8 @@ export default function Home() {
       "Marks the human-reviewed report as published after its evidence and wording are approved.",
       () => {
         setPublished(true);
+        setRunPhase("published");
+        addAgentEvent("Human approved", "Report marked as published");
         setActivity("Report published · human approved");
         window.location.hash = "report";
         return {
@@ -832,40 +1036,36 @@ export default function Home() {
           <i />
           <span>CREATE</span>
         </div>
-        <div className="universal-composer">
-          <span>What should LiveSignal research?</span>
-          <input
-            value={goal}
-            onChange={(event) => setGoal(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") startResearch();
-            }}
-            placeholder="e.g. Compare practical home solar advice from installers"
-            aria-label="Universal YouTube research goal"
-          />
-          <button
-            type="button"
-            disabled={!goal.trim()}
-            onClick={() => startResearch()}
-          >
-            Start new research →
-          </button>
-        </div>
-        <div className="try-example-row">
-          <span>Want to see a finished workflow first?</span>
+        <div className="agent-entry">
+          <div className="agent-entry-mark">CHATGPT</div>
+          <div>
+            <span>ONE REQUEST. THE AGENT OPERATES THIS PAGE.</span>
+            <p>
+              “Research the best beginner advice for growing tomatoes on a
+              balcony. Compare three YouTube sources and build a cited report in
+              LiveSignal.”
+            </p>
+          </div>
+          <ol>
+            <li>Open this page in ChatGPT’s browser</li>
+            <li>Ask once in the conversation</li>
+            <li>Watch this workspace fill itself</li>
+          </ol>
           <button type="button" onClick={loadExample}>
-            Load China food example
+            Preview China food run →
           </button>
         </div>
       </header>
 
-      <section className="workspace-shell">
+      <section className="workspace-shell" id="workspace">
         <div className="workspace-head">
           <div>
             <span className="section-no">
-              {goal ? "ACTIVE RESEARCH WORKSPACE" : "CLEAN-SLATE WORKSPACE"}
+              {goal
+                ? "AGENT RESEARCH IN PROGRESS"
+                : "CHATGPT-CONTROLLED WORKSPACE"}
             </span>
-            <h2>{goal || "Start with any question—not a preloaded demo"}</h2>
+            <h2>{goal || "Ask ChatGPT to research anything across video"}</h2>
           </div>
           <div className="activity">
             <span className="agent-pulse" />
@@ -876,6 +1076,56 @@ export default function Home() {
           </div>
         </div>
 
+        <section className={`agent-console phase-${runPhase}`}>
+          <div className="agent-console-status">
+            <span className="agent-orbit">AI</span>
+            <div>
+              <small>CHATGPT → LIVESIGNAL</small>
+              <h3>
+                {runPhase === "ready"
+                  ? "Waiting for your request in ChatGPT"
+                  : runPhase === "published"
+                    ? "Research approved and published"
+                    : activity}
+              </h3>
+            </div>
+          </div>
+          <div className="agent-progress" aria-label="Agent research progress">
+            {PHASES.map((phase, index) => {
+              const currentIndex = PHASES.findIndex(
+                (item) => item.id === runPhase,
+              );
+              const active =
+                runPhase === "published" ||
+                (currentIndex >= 0 && index <= currentIndex);
+              return (
+                <div className={active ? "active" : ""} key={phase.id}>
+                  <i>{active ? "✓" : index + 1}</i>
+                  <span>{phase.label}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="agent-ledger">
+            {agentEvents.length ? (
+              agentEvents.slice(-3).map((event) => (
+                <p key={event.id}>
+                  <b>{event.label}</b>
+                  <span>{event.detail}</span>
+                </p>
+              ))
+            ) : (
+              <p>
+                <b>No setup form required</b>
+                <span>
+                  ChatGPT will create the brief, add sources, extract evidence,
+                  and deliver the report through this page’s WebMCP tools.
+                </span>
+              </p>
+            )}
+          </div>
+        </section>
+
         <div className="research-grid">
           <aside className="brief-panel" id="brief">
             <PanelLabel
@@ -883,50 +1133,76 @@ export default function Home() {
               title="Research brief"
               sub="Human direction"
             />
-            <h3>Define what a useful answer must do.</h3>
-            <label className="brief-field">
+            <h3>
+              {goal
+                ? "The agent translated your request."
+                : "One prompt becomes the brief."}
+            </h3>
+            <div className="brief-output">
+              <span>Research request</span>
+              <p>{goal || "Waiting for ChatGPT to begin a project…"}</p>
+            </div>
+            <div className="brief-output">
               <span>Must cover</span>
-              <textarea
-                value={brief.mustCover}
-                onChange={(event) =>
-                  setBrief((current) => ({
-                    ...current,
-                    mustCover: event.target.value,
-                  }))
-                }
-                placeholder="Questions, comparisons, people, places, or claims"
-              />
-            </label>
-            <label className="brief-field">
-              <span>Constraints</span>
-              <textarea
-                value={brief.constraints}
-                onChange={(event) =>
-                  setBrief((current) => ({
-                    ...current,
-                    constraints: event.target.value,
-                  }))
-                }
-                placeholder="Exclude, prioritise, recency, budget, point of view…"
-              />
-            </label>
-            <label className="brief-field">
-              <span>Output</span>
-              <input
-                value={brief.outputFormat}
-                onChange={(event) =>
-                  setBrief((current) => ({
-                    ...current,
-                    outputFormat: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <div className="brief-prompt">
-              <span>TRY IT WITH YOUR AGENT</span>
               <p>
-                “Research this topic across YouTube. Find relevant videos,
-                verify the strongest claims, and draft a cited report here.”
+                {brief.mustCover ||
+                  "ChatGPT will infer this from your request."}
+              </p>
+            </div>
+            <div className="brief-output">
+              <span>Constraints</span>
+              <p>{brief.constraints || "No special constraints yet."}</p>
+            </div>
+            <div className="brief-output">
+              <span>Deliverable</span>
+              <p>{brief.outputFormat}</p>
+            </div>
+            <details className="brief-editor">
+              <summary>Fine-tune brief (optional)</summary>
+              <label className="brief-field">
+                <span>Must cover</span>
+                <textarea
+                  value={brief.mustCover}
+                  onChange={(event) =>
+                    setBrief((current) => ({
+                      ...current,
+                      mustCover: event.target.value,
+                    }))
+                  }
+                  placeholder="Questions, comparisons, people, places, or claims"
+                />
+              </label>
+              <label className="brief-field">
+                <span>Constraints</span>
+                <textarea
+                  value={brief.constraints}
+                  onChange={(event) =>
+                    setBrief((current) => ({
+                      ...current,
+                      constraints: event.target.value,
+                    }))
+                  }
+                  placeholder="Exclude, prioritise, recency, budget, point of view…"
+                />
+              </label>
+              <label className="brief-field">
+                <span>Output</span>
+                <input
+                  value={brief.outputFormat}
+                  onChange={(event) =>
+                    setBrief((current) => ({
+                      ...current,
+                      outputFormat: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            </details>
+            <div className="brief-prompt">
+              <span>HUMAN ROLE</span>
+              <p>
+                Review the agent’s choices, inspect source moments, and edit the
+                finished report. Research setup is optional.
               </p>
               <button type="button" onClick={loadExample}>
                 Or load the example
@@ -940,55 +1216,67 @@ export default function Home() {
               title="Source & evidence desk"
               sub="Agent research, human judgment"
             />
-            <label className="source-search">
-              <span>⌕</span>
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search YouTube for candidate videos"
-                aria-label="Video research query"
-              />
-              <button type="button" onClick={() => openYouTubeSearch()}>
-                Find videos ↗
-              </button>
-            </label>
-            <div className="youtube-import">
-              <div>
-                <b>Import a real YouTube video</b>
-                <span>Public metadata + timestamped captions</span>
-              </div>
-              <input
-                value={youtubeUrl}
-                onChange={(event) => setYoutubeUrl(event.target.value)}
-                placeholder="https://youtube.com/watch?v=…"
-                aria-label="YouTube URL to import"
-              />
-              <button
-                type="button"
-                disabled={ingestStatus === "loading"}
-                onClick={() => ingestYouTube(youtubeUrl).catch(() => undefined)}
-              >
-                {ingestStatus === "loading" ? "Importing…" : "Import video"}
-              </button>
-            </div>
-            {ingestError && (
-              <p className="ingest-error">
-                {ingestError} The browser adapter can collect native captions or
-                realtime speech when server captions are blocked.
+            <div className="agent-source-note">
+              <span>AGENT-OPERATED</span>
+              <p>
+                ChatGPT searches across tabs and records chosen videos and
+                timestamped proof here through WebMCP.
               </p>
-            )}
-            <button
-              className="extension-import"
-              type="button"
-              onClick={() =>
-                importBrowserEvidence().catch((error) => {
-                  setIngestStatus("error");
-                  setIngestError(String(error.message || error));
-                })
-              }
-            >
-              Import latest browser evidence
-            </button>
+            </div>
+            <details className="manual-controls">
+              <summary>Manual fallback controls</summary>
+              <label className="source-search">
+                <span>⌕</span>
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search YouTube for candidate videos"
+                  aria-label="Video research query"
+                />
+                <button type="button" onClick={() => openYouTubeSearch()}>
+                  Find videos ↗
+                </button>
+              </label>
+              <div className="youtube-import">
+                <div>
+                  <b>Import a real YouTube video</b>
+                  <span>Public metadata + timestamped captions</span>
+                </div>
+                <input
+                  value={youtubeUrl}
+                  onChange={(event) => setYoutubeUrl(event.target.value)}
+                  placeholder="https://youtube.com/watch?v=…"
+                  aria-label="YouTube URL to import"
+                />
+                <button
+                  type="button"
+                  disabled={ingestStatus === "loading"}
+                  onClick={() =>
+                    ingestYouTube(youtubeUrl).catch(() => undefined)
+                  }
+                >
+                  {ingestStatus === "loading" ? "Importing…" : "Import video"}
+                </button>
+              </div>
+              {ingestError && (
+                <p className="ingest-error">
+                  {ingestError} The optional extension can collect native
+                  captions or realtime speech when server captions are blocked.
+                </p>
+              )}
+              <button
+                className="extension-import"
+                type="button"
+                onClick={() =>
+                  importBrowserEvidence().catch((error) => {
+                    setIngestStatus("error");
+                    setIngestError(String(error.message || error));
+                  })
+                }
+              >
+                Import latest extension evidence
+              </button>
+            </details>
 
             <p className="coverage-note">
               <b>
@@ -1001,12 +1289,12 @@ export default function Home() {
 
             {sources.length === 0 ? (
               <div className="empty-state source-empty">
-                <span>NO SOURCES YET</span>
-                <h3>Give the agent a topic, not a canned dataset.</h3>
+                <span>WAITING FOR CHATGPT</span>
+                <h3>Sources will arrive here automatically.</h3>
                 <p>
-                  Ask the agent to find videos, paste any YouTube URL, or import
-                  evidence captured by the extension. Every source added here is
-                  visible and inspectable.
+                  Ask once in the ChatGPT conversation. The agent will discover
+                  videos, verify source moments, and use LiveSignal’s page tools
+                  to build this evidence desk.
                 </p>
               </div>
             ) : (
@@ -1136,9 +1424,6 @@ export default function Home() {
               light
             />
             <div className="guide-actions">
-              <button type="button" onClick={() => addReportSection()}>
-                + Add section
-              </button>
               <button
                 className={published ? "published" : "publish"}
                 type="button"
@@ -1184,15 +1469,12 @@ export default function Home() {
           {reportSections.length === 0 ? (
             <div className="empty-state report-empty">
               <span>YOUR REPORT STARTS HERE</span>
-              <h3>No answer is prewritten.</h3>
+              <h3>ChatGPT will write into this page.</h3>
               <p>
-                Once evidence is collected, ask the agent to draft a report. It
-                will create editable sections with timestamp citations on this
-                same page.
+                The agent will create editable sections with timestamp citations
+                after it verifies the selected videos. You only need to review
+                and refine the result.
               </p>
-              <button type="button" onClick={() => addReportSection()}>
-                Add a section manually
-              </button>
             </div>
           ) : (
             <div className="report-section-list">

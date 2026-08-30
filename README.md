@@ -2,9 +2,9 @@
 
 **Research anything across YouTube with timestamped evidence.**
 
-LiveSignal is a universal WebMCP video-research workspace. A person defines the goal and edits the result; their agent imports relevant YouTube videos, searches timed captions, pins evidence, and drafts a report in the same visible page. The China food guide is the included example project, not the product boundary.
+LiveSignal is a universal WebMCP video-research workspace. A person gives ChatGPT one request; the agent creates the brief, researches relevant YouTube videos across browser tabs, records timed evidence, and drafts a report back into the same visible page. The person reviews and edits the result. The China food guide is an optional example project, not the product boundary.
 
-It is deliberately an adapter, not a streaming platform. The Companion web app demonstrates the interaction design; the browser extension exposes semantic tools on YouTube and Twitch pages; the Codex plugin teaches an agent how to combine stream discovery, browser navigation, and evidence retrieval.
+It is deliberately an adapter, not a streaming platform. The LiveSignal web app is the primary WebMCP surface; its tools let ChatGPT operate the research workspace directly. The browser extension adds optional native-caption and realtime-STT evidence on YouTube and Twitch, while the bundled skill documents the end-to-end workflow.
 
 ## The problem
 
@@ -14,11 +14,12 @@ Useful information is scattered across long YouTube videos. Existing agents can 
 
 ### Companion web app
 
-- A universal research-goal composer and YouTube URL importer.
+- An agent-operated workspace with no required setup form.
 - Real YouTube metadata ingestion and server-caption ingestion where YouTube permits it.
-- Browser-extension evidence import when serverless caption access is unavailable.
+- A `record_video_evidence` cross-tab tool so ChatGPT can write sources and timestamped moments researched in other tabs back into LiveSignal.
+- Optional browser-extension evidence import when serverless caption access is unavailable.
 - Searchable timed evidence plus a directly editable, publishable report.
-- 18 semantic WebMCP tools operating on the same visible state as the human UI.
+- 16 semantic WebMCP tools operating on the same visible state as the human UI.
 
 ### Browser adapter
 
@@ -37,11 +38,11 @@ The latest unpacked demo bundle is available from the hosted site as `livesignal
 
 ### Companion page
 
-The universal surface includes `set_research_goal`, `ingest_youtube_video`, `import_browser_evidence`, `search_video_evidence`, `write_report`, evidence pinning, source management, report revision, timestamp navigation, and publication tools.
+The universal surface includes `begin_research`, `open_youtube_search`, `ingest_youtube_video`, `record_video_evidence`, `search_video_evidence`, `write_report`, evidence pinning, report revision, timestamp navigation, and publication tools.
 
 ## Agent skill/plugin
 
-`plugins/livesignal/` contains an installable Codex plugin with the LiveSignal skill. It pairs browser control with the extension: the browser agent discovers and navigates streams; LiveSignal supplies ranked discovery signals, transcript evidence, search, events, and player actions. WebMCP remains the native path, with `#livesignal-agent-state` as the browser-control evidence path when page-registered tools are not surfaced.
+`plugins/livesignal/` contains an installable skill that describes the LiveSignal workflow. WebMCP site tools are the native path: ChatGPT operates the open workspace, researches across tabs, and records evidence back into the page. The extension's `#livesignal-agent-state` remains a compatibility path for Chrome-based livestream research.
 
 Install the public plugin marketplace and plugin:
 
@@ -67,11 +68,11 @@ Start a new Codex task after installation so the LiveSignal skill is loaded.
 ## Try the real YouTube path
 
 1. Start the web app with `npm run dev`.
-2. In a compatible Chrome build, enable WebMCP.
-3. Open `chrome://extensions`, enable Developer mode, then load `extension/` as an unpacked extension.
-4. Open the Companion and set any research goal.
-5. Import public YouTube URLs. If server captions are unavailable, open the source with the extension, expose its transcript or enable listening once, then choose **Import latest browser evidence** in the Companion.
-6. Ask the agent to search the timed evidence and write an editable report with source moments.
+2. Open LiveSignal in ChatGPT's built-in browser and give ChatGPT one video-research request.
+3. ChatGPT calls `begin_research`, finds candidate videos across tabs, and imports public captions with `ingest_youtube_video`.
+4. When ChatGPT reads evidence directly in another tab, it calls `record_video_evidence` to write the source moments back into LiveSignal.
+5. ChatGPT searches the evidence and writes an editable report with citations into the page.
+6. Optional: load `extension/` in Chrome for native-caption or realtime-STT capture on videos without accessible transcripts.
 
 ## Local development
 
