@@ -51,14 +51,25 @@ test("server-renders a focused one-request consumer entry", async () => {
   );
 });
 
-test("exposes the page-to-agent request and canvas comment wait tools", async () => {
+test("exposes renewable WebMCP collaboration and browser-agent tools", async () => {
   const page = await readFile(
     new URL("../app/page.tsx", import.meta.url),
     "utf8",
   );
   assert.match(page, /"wait_for_research_request"/);
   assert.match(page, /"wait_for_agent_comment"/);
+  assert.match(page, /"start_canvas_collaboration"/);
+  assert.match(page, /"wait_for_collaboration_event"/);
+  assert.match(page, /"finish_canvas_collaboration"/);
+  assert.match(page, /Save &amp; send to agent|Save & send to agent/);
+  assert.match(page, /Save for agent/);
+  assert.match(page, /Move earlier/);
+  assert.match(page, /Move later/);
   assert.match(page, /livesignal-page-agent-bridge/);
   assert.match(page, /livesignal:page-tool-call/);
   assert.match(page, /canvasState\.canvasBlocks\.length/);
+  const toolNames = [
+    ...page.matchAll(/\btool\(\s*\n?\s*"([^"]+)"/g),
+  ].map((match) => match[1]);
+  assert.equal(new Set(toolNames).size, 35);
 });

@@ -83,6 +83,37 @@ type HumanRevision = {
   detail: string;
   createdAt: string;
   acknowledged: boolean;
+  sentAt?: string;
+  sequence?: number;
+};
+
+type CollaborationPresence =
+  | "inactive"
+  | "listening"
+  | "responding"
+  | "paused"
+  | "finished";
+
+type CollaborationSession = {
+  id: string;
+  status: "active" | "finished";
+  startedAt: string;
+  finishedAt?: string;
+  finishReason?: string;
+};
+
+type CanvasChangeBatch = {
+  id: string;
+  sessionId: string;
+  sequence: number;
+  createdAt: string;
+  revisions: HumanRevision[];
+  canvas: {
+    title: string;
+    overview: string;
+    theme: CanvasTheme;
+    blocks: CanvasBlock[];
+  };
 };
 
 type AgentCommentKind = "research-more" | "verify" | "counterpoint" | "improve";
@@ -129,7 +160,7 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 32;
+const TOOL_COUNT = 35;
 const ENTRY_SUGGESTIONS = [
   {
     label: "Plan a food trip",
@@ -260,6 +291,13 @@ export default function Home() {
   const [agentCommentScope, setAgentCommentScope] =
     useState<"block" | "canvas">("block");
   const [agentListening, setAgentListening] = useState(false);
+  const [collaborationPresence, setCollaborationPresence] =
+    useState<CollaborationPresence>("inactive");
+  const [collaborationSession, setCollaborationSession] =
+    useState<CollaborationSession | null>(null);
+  const [canvasChangeBatches, setCanvasChangeBatches] = useState<
+    CanvasChangeBatch[]
+  >([]);
   const [agentListeningForRequest, setAgentListeningForRequest] =
     useState(false);
   const [entryPrompt, setEntryPrompt] = useState("");
@@ -281,6 +319,7 @@ export default function Home() {
     "checking" | "registered" | "unavailable" | "error"
   >("checking");
   const registered = useRef(false);
+  const collaborationSequence = useRef(0);
   const agentCommentInputRef = useRef<HTMLTextAreaElement>(null);
 
   const focusEvidence = useMemo(
@@ -299,6 +338,23 @@ export default function Home() {
     () => humanRevisions.filter((revision) => !revision.acknowledged),
     [humanRevisions],
   );
+  const unsentHumanRevisions = useMemo(
+    () =>
+      humanRevisions.filter(
+        (revision) => !revision.acknowledged && !revision.sentAt,
+      ),
+    [humanRevisions],
+  );
+  const sentHumanRevisions = useMemo(
+    () =>
+      humanRevisions.filter(
+        (revision) => !revision.acknowledged && revision.sentAt,
+      ),
+    [humanRevisions],
+  );
+  const collaborationActive = collaborationSession?.status === "active";
+  const agentActivelyListening =
+    agentListening || collaborationPresence === "listening";
   const openAgentComments = useMemo(
     () => agentComments.filter((comment) => comment.status !== "answered"),
     [agentComments],
@@ -309,6 +365,9 @@ export default function Home() {
       canvasBlocks[0],
     [canvasBlocks, selectedCanvasId],
   );
+  const selectedCanvasIndex = selectedCanvasBlock
+    ? canvasBlocks.findIndex((block) => block.id === selectedCanvasBlock.id)
+    : -1;
   const visibleAgentComments = useMemo(
     () =>
       agentComments.filter(
@@ -341,6 +400,9 @@ export default function Home() {
     agentComments,
     canvasBlocks,
     canvasTheme,
+    collaborationSession,
+    collaborationPresence,
+    canvasChangeBatches,
   });
 
   useEffect(() => {
@@ -360,6 +422,9 @@ export default function Home() {
       agentComments,
       canvasBlocks,
       canvasTheme,
+      collaborationSession,
+      collaborationPresence,
+      canvasChangeBatches,
     };
   }, [
     goal,
@@ -377,6 +442,9 @@ export default function Home() {
     agentComments,
     canvasBlocks,
     canvasTheme,
+    collaborationSession,
+    collaborationPresence,
+    canvasChangeBatches,
   ]);
 
   function addAgentEvent(label: string, detail: string) {
@@ -391,7 +459,10 @@ export default function Home() {
     const revisionId = crypto.randomUUID();
     setHumanRevisions((current) => {
       const pending = current.find(
-        (revision) => revision.field === field && !revision.acknowledged,
+        (revision) =>
+          revision.field === field &&
+          !revision.acknowledged &&
+          !revision.sentAt,
       );
       if (pending) {
         return current.map((revision) =>
@@ -412,12 +483,126 @@ export default function Home() {
       ];
     });
     setPublished(false);
-    setActivity(`Human changed ${field} · ready for agent`);
+    setActivity(`Human changed ${field} · save when ready`);
+  }
+
+  function startCanvasCollaboration() {
+    const current = live.current.collaborationSession;
+    if (current?.status === "active") {
+      return {
+        ok: true,
+        session: current,
+        lastSequence: collaborationSequence.current,
+        nextSequence: collaborationSequence.current + 1,
+      };
+    }
+    const session: CollaborationSession = {
+      id: `collab-${crypto.randomUUID()}`,
+      status: "active",
+      startedAt: new Date().toISOString(),
+    };
+    setCollaborationSession(session);
+    setCollaborationPresence("paused");
+    addAgentEvent("Agent joined the canvas", "Live collaboration started");
+    setActivity("Agent joined · ready to listen for saved changes");
+    window.location.hash = "canvas";
+    return {
+      ok: true,
+      session,
+      lastSequence: collaborationSequence.current,
+      nextSequence: collaborationSequence.current + 1,
+    };
+  }
+
+  function sendCanvasChanges() {
+    const revisions = live.current.humanRevisions.filter(
+      (revision) => !revision.acknowledged && !revision.sentAt,
+    );
+    if (!revisions.length)
+      return { ok: false, error: "There are no unsaved canvas changes." };
+
+    const existingSession = live.current.collaborationSession;
+    const session: CollaborationSession =
+      existingSession?.status === "active"
+        ? existingSession
+        : {
+            id: `collab-${crypto.randomUUID()}`,
+            status: "active",
+            startedAt: new Date().toISOString(),
+          };
+    if (session !== existingSession) {
+      setCollaborationSession(session);
+      setCollaborationPresence("paused");
+    }
+
+    const sentAt = new Date().toISOString();
+    const sequence = ++collaborationSequence.current;
+    const sentRevisions = revisions.map((revision) => ({
+      ...revision,
+      sentAt,
+      sequence,
+    }));
+    const sentIds = new Set(sentRevisions.map((revision) => revision.id));
+    setHumanRevisions((current) =>
+      current.map((revision) =>
+        sentIds.has(revision.id)
+          ? { ...revision, sentAt, sequence }
+          : revision,
+      ),
+    );
+
+    const batch: CanvasChangeBatch = {
+      id: `change-${crypto.randomUUID()}`,
+      sessionId: session.id,
+      sequence,
+      createdAt: sentAt,
+      revisions: sentRevisions,
+      canvas: {
+        title: live.current.reportTitle,
+        overview: live.current.reportOverview,
+        theme: live.current.canvasTheme,
+        blocks: live.current.canvasBlocks,
+      },
+    };
+    setCanvasChangeBatches((current) => [...current.slice(-19), batch]);
     window.dispatchEvent(
-      new CustomEvent("livesignal:human-revision", {
-        detail: { field, value: detail, createdAt: now },
+      new CustomEvent("livesignal:collaboration-event", {
+        detail: { type: "canvas_change", batch },
       }),
     );
+    addAgentEvent(
+      "Human saved canvas changes",
+      `${sentRevisions.length} change${sentRevisions.length === 1 ? "" : "s"} · batch ${sequence}`,
+    );
+    setActivity(
+      live.current.collaborationPresence === "listening"
+        ? "Saved changes sent to the active agent"
+        : "Changes saved for the agent",
+    );
+    return { ok: true, session, batch };
+  }
+
+  function finishCanvasCollaboration(reason = "human-finished") {
+    const current = live.current.collaborationSession;
+    if (!current || current.status !== "active")
+      return { ok: true, status: "finished" };
+    const finished: CollaborationSession = {
+      ...current,
+      status: "finished",
+      finishedAt: new Date().toISOString(),
+      finishReason: reason,
+    };
+    setCollaborationSession(finished);
+    setCollaborationPresence("finished");
+    setAgentListening(false);
+    window.dispatchEvent(
+      new CustomEvent("livesignal:collaboration-event", {
+        detail: { type: "session_finished", session: finished },
+      }),
+    );
+    addAgentEvent("Collaboration finished", reason.replaceAll("-", " "));
+    setActivity("Collaboration finished · canvas remains saved");
+    return { ok: true, status: "finished", session: finished };
   }
 
   function createAgentComment(
@@ -483,6 +668,8 @@ export default function Home() {
           : comment,
       ),
     );
+    if (live.current.collaborationSession?.status === "active")
+      setCollaborationPresence("responding");
     addAgentEvent("Agent picked up a comment", existing.query);
     setActivity("Agent is researching your canvas comment");
     return { ok: true, commentId: id, status: "researching" };
@@ -515,6 +702,8 @@ export default function Home() {
           : comment,
       ),
     );
+    if (live.current.collaborationSession?.status === "active")
+      setCollaborationPresence("paused");
     addAgentEvent("Agent answered a canvas comment", cleanResponse);
     setActivity("New research returned to the canvas");
     window.location.hash = "canvas";
@@ -690,6 +879,12 @@ export default function Home() {
   function startResearch(nextGoal = goal) {
     const cleanGoal = nextGoal.trim();
     if (!cleanGoal) return;
+    if (live.current.collaborationSession?.status === "active")
+      finishCanvasCollaboration("new-project");
+    setCollaborationSession(null);
+    setCollaborationPresence("inactive");
+    setCanvasChangeBatches([]);
+    collaborationSequence.current = 0;
     setGoal(cleanGoal);
     setSearchQuery(cleanGoal);
     setBrief(EMPTY_BRIEF);
@@ -741,6 +936,12 @@ export default function Home() {
   }
 
   function loadExample() {
+    if (live.current.collaborationSession?.status === "active")
+      finishCanvasCollaboration("opened-example");
+    setCollaborationSession(null);
+    setCollaborationPresence("inactive");
+    setCanvasChangeBatches([]);
+    collaborationSequence.current = 0;
     const example = exampleWorkspace();
     setGoal(
       "Build a must-try food guide for my China trip from trusted YouTube videos",
@@ -1103,6 +1304,13 @@ export default function Home() {
       if (unknownCitation)
         throw new Error(`Unknown evidence citation: ${unknownCitation}`);
 
+      if (live.current.collaborationSession?.status === "active")
+        finishCanvasCollaboration("new-agent-project");
+      setCollaborationSession(null);
+      setCollaborationPresence("inactive");
+      setCanvasChangeBatches([]);
+      collaborationSequence.current = 0;
+
       setGoal(request);
       setSearchQuery(request);
       setBrief({
@@ -1221,12 +1429,174 @@ export default function Home() {
       () => live.current,
     );
     tool(
+      "start_canvas_collaboration",
+      "Starts or resumes a live human-agent canvas session. Call once after creating the canvas, then repeatedly call wait_for_collaboration_event until the human finishes the session.",
+      () => startCanvasCollaboration(),
+    );
+    tool(
+      "wait_for_collaboration_event",
+      "Waits for the next saved canvas-change batch, actionable human comment, or session-finished signal. Re-call after handling each event or timeout while the session remains active.",
+      async (input) => {
+        const session = live.current.collaborationSession;
+        if (!session || session.status !== "active") {
+          return {
+            status: "not_started",
+            next: "Call start_canvas_collaboration first.",
+          };
+        }
+        const requestedSessionId = String(input.sessionId ?? session.id);
+        if (requestedSessionId !== session.id) {
+          return {
+            status: "session_mismatch",
+            activeSessionId: session.id,
+          };
+        }
+        const afterSequence = Math.max(0, Number(input.afterSequence ?? 0));
+        const existingComment = live.current.agentComments.find(
+          (comment) => comment.status === "pending",
+        );
+        if (existingComment) {
+          setCollaborationPresence("responding");
+          return {
+            status: "comment",
+            sessionId: session.id,
+            comment: existingComment,
+          };
+        }
+        const existingBatch = live.current.canvasChangeBatches.find(
+          (batch) =>
+            batch.sessionId === session.id && batch.sequence > afterSequence,
+        );
+        if (existingBatch) {
+          setCollaborationPresence("responding");
+          return {
+            status: "canvas_change",
+            sessionId: session.id,
+            sequence: existingBatch.sequence,
+            batch: existingBatch,
+          };
+        }
+
+        const requestedMs = Number(input.timeoutMs ?? 30000);
+        const timeoutMs = Math.max(1000, Math.min(requestedMs, 45000));
+        setAgentListening(true);
+        setCollaborationPresence("listening");
+        setActivity("Agent is listening for saved canvas changes");
+        return await new Promise((resolve) => {
+          let settled = false;
+          const finish = (result: Record<string, unknown>) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            window.removeEventListener(
+              "livesignal:collaboration-event",
+              onCollaborationEvent as EventListener,
+            );
+            window.removeEventListener(
+              "livesignal:agent-comment",
+              onComment as EventListener,
+            );
+            setAgentListening(false);
+            if (result.status === "idle") setCollaborationPresence("paused");
+            resolve(result);
+          };
+          const onCollaborationEvent = (event: Event) => {
+            const detail = (
+              event as CustomEvent<{
+                type: "canvas_change" | "session_finished";
+                batch?: CanvasChangeBatch;
+                session?: CollaborationSession;
+              }>
+            ).detail;
+            if (detail.type === "session_finished") {
+              setCollaborationPresence("finished");
+              finish({
+                status: "finished",
+                session: detail.session,
+              });
+              return;
+            }
+            if (
+              detail.batch?.sessionId === session.id &&
+              detail.batch.sequence > afterSequence
+            ) {
+              setCollaborationPresence("responding");
+              finish({
+                status: "canvas_change",
+                sessionId: session.id,
+                sequence: detail.batch.sequence,
+                batch: detail.batch,
+              });
+            }
+          };
+          const onComment = (event: Event) => {
+            setCollaborationPresence("responding");
+            finish({
+              status: "comment",
+              sessionId: session.id,
+              comment: (event as CustomEvent<AgentComment>).detail,
+            });
+          };
+          const timeoutId = window.setTimeout(
+            () =>
+              finish({
+                status: "idle",
+                sessionId: session.id,
+                afterSequence,
+                waitedMs: timeoutMs,
+              }),
+            timeoutMs,
+          );
+          window.addEventListener(
+            "livesignal:collaboration-event",
+            onCollaborationEvent as EventListener,
+          );
+          window.addEventListener(
+            "livesignal:agent-comment",
+            onComment as EventListener,
+          );
+        });
+      },
+      {
+        type: "object",
+        properties: {
+          sessionId: { type: "string" },
+          afterSequence: {
+            type: "number",
+            description:
+              "Last handled canvas-change sequence. Use 0 for a new session.",
+          },
+          timeoutMs: {
+            type: "number",
+            description: "Renewable wait duration, capped at 45000 ms.",
+          },
+        },
+      },
+    );
+    tool(
+      "finish_canvas_collaboration",
+      "Finishes the active canvas collaboration session when the human asks to close the case. Saved work remains on the page.",
+      (input) =>
+        finishCanvasCollaboration(
+          String(input.reason ?? "agent-confirmed-finish"),
+        ),
+      {
+        type: "object",
+        properties: { reason: { type: "string" } },
+      },
+    );
+    tool(
       "get_human_revisions",
-      "Returns human edits made to the live brief or report that the agent has not yet acknowledged. Use while collaborating before revising the report.",
+      "Returns saved human edits that the agent has not yet acknowledged, plus unsaved-change count and the current shared artifact.",
       () => ({
         revisions: live.current.humanRevisions.filter(
-          (revision) => !revision.acknowledged,
+          (revision) => !revision.acknowledged && revision.sentAt,
         ),
+        unsavedCount: live.current.humanRevisions.filter(
+          (revision) => !revision.acknowledged && !revision.sentAt,
+        ).length,
+        latestSequence:
+          live.current.canvasChangeBatches.at(-1)?.sequence ?? 0,
         currentBrief: live.current.brief,
         currentReport: {
           title: live.current.reportTitle,
@@ -1256,6 +1626,8 @@ export default function Home() {
             ? "Agent read the latest shared draft"
             : `${requestedIds.length} revisions read`,
         );
+        if (live.current.collaborationSession?.status === "active")
+          setCollaborationPresence("paused");
         setActivity("Agent caught up with human edits");
         return { ok: true, acknowledged: acknowledgeAll ? "all" : requestedIds };
       },
@@ -2317,14 +2689,22 @@ export default function Home() {
           <div className="agent-ledger">
             <div
               className={`collaboration-status ${
-                pendingHumanRevisions.length ? "pending" : "caught-up"
+                pendingHumanRevisions.length || collaborationActive
+                  ? "pending"
+                  : "caught-up"
               }`}
             >
               <b>HUMAN → AGENT</b>
               <span>
-                {pendingHumanRevisions.length
-                  ? `${pendingHumanRevisions.length} live change${pendingHumanRevisions.length === 1 ? "" : "s"} waiting for ChatGPT`
-                  : "Shared draft caught up"}
+                {unsentHumanRevisions.length
+                  ? `${unsentHumanRevisions.length} unsaved change${unsentHumanRevisions.length === 1 ? "" : "s"}`
+                  : sentHumanRevisions.length
+                    ? `${sentHumanRevisions.length} saved change${sentHumanRevisions.length === 1 ? "" : "s"} waiting for agent`
+                    : collaborationPresence === "listening"
+                      ? "Agent listening for your next save"
+                      : collaborationPresence === "responding"
+                        ? "Agent responding to the canvas"
+                        : "Shared draft caught up"}
               </span>
             </div>
             {agentEvents.length ? (
@@ -2366,8 +2746,8 @@ export default function Home() {
               <div className="brief-collaboration-note">
                 <span>LIVE SHARED BRIEF</span>
                 <p>
-                  Add detail only when it matters. Every edit is available to
-                  the active agent immediately.
+                  Add detail only when it matters. Save your edits when you are
+                  ready for the active agent to react.
                 </p>
               </div>
               <div className="brief-live-editor">
@@ -2866,22 +3246,82 @@ export default function Home() {
                   className={`canvas-collab-card ${
                     pendingHumanRevisions.length || openAgentComments.length
                       ? "pending"
-                      : ""
+                      : agentActivelyListening
+                        ? "listening"
+                        : ""
                   }`}
                 >
-                  <span>HUMAN ↔ AGENT LOOP</span>
+                  <div className="collab-session-line">
+                    <span>HUMAN ↔ AGENT LOOP</span>
+                    <i className={`collab-presence ${collaborationPresence}`}>
+                      {collaborationPresence === "listening"
+                        ? "● AGENT LISTENING"
+                        : collaborationPresence === "responding"
+                          ? "● AGENT RESPONDING"
+                          : collaborationPresence === "finished"
+                            ? "SESSION FINISHED"
+                            : collaborationActive
+                              ? "SESSION ACTIVE"
+                              : "SAVED WORKSPACE"}
+                    </i>
+                  </div>
                   <b>
                     {openAgentComments.length
                       ? `${openAgentComments.length} comment${openAgentComments.length === 1 ? "" : "s"} in the agent loop`
-                      : pendingHumanRevisions.length
-                      ? `${pendingHumanRevisions.length} change${pendingHumanRevisions.length === 1 ? "" : "s"} ready for agent reaction`
-                      : "Canvas and agent are caught up"}
+                      : unsentHumanRevisions.length
+                        ? `${unsentHumanRevisions.length} unsaved change${unsentHumanRevisions.length === 1 ? "" : "s"}`
+                        : sentHumanRevisions.length
+                          ? `${sentHumanRevisions.length} change${sentHumanRevisions.length === 1 ? "" : "s"} sent to the agent`
+                          : collaborationPresence === "listening"
+                            ? "Your agent is here"
+                            : collaborationPresence === "responding"
+                              ? "Your agent is working"
+                              : collaborationPresence === "finished"
+                                ? "This collaboration is finished"
+                                : "Canvas and agent are caught up"}
                   </b>
                   <p>
-                    Edit the artifact directly or leave an actionable comment.
-                    The agent receives the selected block, its citations, and
-                    your exact question through WebMCP.
+                    Move, rewrite, or restyle the artifact freely. Save once
+                    when the composition is ready; an active agent receives the
+                    complete change batch through WebMCP.
                   </p>
+                  <div className="collab-save-actions">
+                    <button
+                      type="button"
+                      className="save-canvas-changes"
+                      disabled={unsentHumanRevisions.length === 0}
+                      onClick={sendCanvasChanges}
+                    >
+                      <span>
+                        {agentActivelyListening
+                          ? "Save & send to agent"
+                          : "Save for agent"}
+                      </span>
+                      <b>{unsentHumanRevisions.length || "✓"}</b>
+                    </button>
+                    {collaborationActive && (
+                      <button
+                        type="button"
+                        className="finish-collaboration"
+                        onClick={() =>
+                          finishCanvasCollaboration("human-finished")
+                        }
+                      >
+                        Finish
+                      </button>
+                    )}
+                  </div>
+                  <small className="collab-delivery-note">
+                    {unsentHumanRevisions.length
+                      ? "Changes remain local until you save."
+                      : sentHumanRevisions.length
+                        ? agentActivelyListening
+                          ? "Delivered to the active agent."
+                          : "Queued safely until the agent reconnects."
+                        : collaborationPresence === "finished"
+                          ? "Start another project whenever you are ready."
+                          : "Nothing new to send."}
+                  </small>
                 </div>
 
                 <div className="agent-comment-desk">
@@ -2894,9 +3334,11 @@ export default function Home() {
                           : "Whole canvas"}
                       </b>
                     </div>
-                    <i className={`agent-presence ${mcp} ${agentListening ? "listening" : ""}`}>
-                      {agentListening
+                    <i className={`agent-presence ${mcp} ${agentActivelyListening ? "listening" : ""}`}>
+                      {agentActivelyListening
                         ? "● AGENT LISTENING"
+                        : collaborationPresence === "responding"
+                          ? "● AGENT RESPONDING"
                         : mcp === "registered"
                           ? "WEBMCP LIVE"
                           : "AGENT INBOX"}
@@ -3076,6 +3518,40 @@ export default function Home() {
                           {span}
                         </button>
                       ))}
+                    </div>
+                    <div className="canvas-inline-controls canvas-order-controls">
+                      <span>ORDER</span>
+                      <button
+                        type="button"
+                        disabled={selectedCanvasIndex <= 0}
+                        onClick={() => {
+                          const targetIndex = selectedCanvasIndex - 1;
+                          reorderCanvasBlock(selectedCanvasBlock.id, targetIndex);
+                          recordHumanRevision(
+                            "canvas layout",
+                            `Moved ${selectedCanvasBlock.title} to position ${targetIndex + 1}`,
+                          );
+                        }}
+                      >
+                        Move earlier
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          selectedCanvasIndex < 0 ||
+                          selectedCanvasIndex >= canvasBlocks.length - 1
+                        }
+                        onClick={() => {
+                          const targetIndex = selectedCanvasIndex + 1;
+                          reorderCanvasBlock(selectedCanvasBlock.id, targetIndex);
+                          recordHumanRevision(
+                            "canvas layout",
+                            `Moved ${selectedCanvasBlock.title} to position ${targetIndex + 1}`,
+                          );
+                        }}
+                      >
+                        Move later
+                      </button>
                     </div>
                     <div className="canvas-inline-controls accent-picker">
                       <span>INK</span>

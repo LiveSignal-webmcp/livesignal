@@ -1869,6 +1869,7 @@ a {
   background: #242622;
 }
 .canvas-collab-card > span,
+.collab-session-line > span,
 .agent-comment-heading span,
 .canvas-control-group > span,
 .canvas-block-editor > span {
@@ -1892,6 +1893,102 @@ a {
   box-shadow: inset 3px 0 #d6df9c;
 }
 .canvas-collab-card.pending b { color: #d6df9c; }
+.canvas-collab-card.listening {
+  border-color: #73b98a;
+  box-shadow:
+    inset 3px 0 #73b98a,
+    0 0 0 1px rgba(115, 185, 138, 0.08);
+}
+.collab-session-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.collab-session-line > span {
+  font: 700 7px "DM Mono", monospace;
+  letter-spacing: 0.9px;
+}
+.collab-presence {
+  padding: 4px 6px;
+  border: 1px solid #55594f;
+  color: #95998e;
+  font: 700 6px "DM Mono", monospace;
+  font-style: normal;
+  letter-spacing: 0.45px;
+  white-space: nowrap;
+}
+.collab-presence.listening {
+  border-color: #73b98a;
+  color: #9cddb1;
+  animation: agent-listening 1.4s ease-in-out infinite;
+}
+.collab-presence.responding {
+  border-color: #ef8b79;
+  color: #ef8b79;
+}
+.collab-presence.finished {
+  border-color: #595c54;
+  color: #7f8279;
+}
+.collab-save-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  margin-top: 13px;
+}
+.collab-save-actions button {
+  min-height: 38px;
+  border: 1px solid #62665b;
+  font: 700 7px "DM Mono", monospace;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+.save-canvas-changes {
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #d6df9c;
+  color: #20231e;
+}
+.save-canvas-changes:hover:not(:disabled) {
+  background: #eef5b7;
+}
+.save-canvas-changes:disabled {
+  cursor: default;
+  background: #30332e;
+  color: #71756b;
+}
+.canvas-collab-card .save-canvas-changes b {
+  min-width: 21px;
+  margin: 0;
+  padding: 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 99px;
+  background: rgba(32, 35, 30, 0.14);
+  color: inherit;
+  font: 700 7px "DM Mono", monospace;
+}
+.finish-collaboration {
+  padding: 0 9px;
+  background: transparent;
+  color: #a5a89e;
+}
+.finish-collaboration:hover {
+  border-color: #ef8b79;
+  color: #ef8b79;
+}
+.collab-delivery-note {
+  display: block;
+  margin-top: 8px;
+  color: #7f8279;
+  font: 500 6px/1.4 "DM Mono", monospace;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
 .agent-comment-desk {
   border-color: #6f7664;
   box-shadow: inset 0 3px #ef8b79;
@@ -2096,6 +2193,13 @@ a {
   color: var(--ink);
   background: #f2ecdd;
   border-color: #f2ecdd;
+}
+.canvas-inline-controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+.canvas-order-controls > span {
+  flex: 0 0 100%;
 }
 .canvas-block-editor label {
   display: block;
