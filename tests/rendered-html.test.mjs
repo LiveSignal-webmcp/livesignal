@@ -60,4 +60,5 @@ test("exposes the page-to-agent request and canvas comment wait tools", async ()
   assert.match(page, /"wait_for_agent_comment"/);
   assert.match(page, /livesignal-page-agent-bridge/);
   assert.match(page, /livesignal:page-tool-call/);
+  assert.match(page, /canvasState\.canvasBlocks\.length/);
 });

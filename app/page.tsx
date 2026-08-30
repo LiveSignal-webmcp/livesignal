@@ -654,17 +654,19 @@ export default function Home() {
   }
 
   async function downloadCanvas() {
-    if (!canvasRef.current || canvasBlocks.length === 0)
+    const canvasState = live.current;
+    if (!canvasRef.current || canvasState.canvasBlocks.length === 0)
       return { ok: false, error: "Create the canvas first." };
     setCanvasExporting(true);
     try {
       const dataUrl = await toPng(canvasRef.current, {
         cacheBust: true,
         pixelRatio: 2,
-        backgroundColor: canvasTheme === "field-notes" ? "#1f2821" : "#f3ead8",
+        backgroundColor:
+          canvasState.canvasTheme === "field-notes" ? "#1f2821" : "#f3ead8",
       });
       const slug =
-        reportTitle
+        canvasState.reportTitle
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)/g, "") || "livesignal-canvas";
