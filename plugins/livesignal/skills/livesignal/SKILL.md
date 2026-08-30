@@ -45,7 +45,9 @@ Use LiveSignal as a shared video research and creation desk operated primarily t
 
 ## Paired browser mode
 
-Prefer registered WebMCP tools. If browser control can navigate the page but does not surface `document.modelContext` tools, use the evidence snapshot as the compatibility path. Confirm `document.documentElement.dataset.livesignalAgent === "ready"`, then read and parse the ordinary DOM output `#livesignal-agent-state`. It contains current state, committed transcript segments, recent events, and watch rules. Poll it while listening; use normal browser controls for discovery, navigation, and seeking.
+Prefer registered WebMCP tools. On the LiveSignal workspace, browser-control agents that cannot directly surface `document.modelContext` may invoke the identical registered handlers through `#livesignal-page-agent-bridge`. Confirm `document.documentElement.dataset.livesignalPageAgent === "ready"`, set the element's `data-request` to JSON containing a unique `requestId`, tool `name`, and `input`, dispatch the ordinary `livesignal:page-tool-call` window event, then poll the element's JSON text until the matching response arrives. Treat `{ok:false}` as a tool error. This bridge is the Codex/browser-control compatibility transport; it does not replace WebMCP registration.
+
+On a YouTube or Twitch source page, use the evidence snapshot as the compatibility path. Confirm `document.documentElement.dataset.livesignalAgent === "ready"`, then read and parse the ordinary DOM output `#livesignal-agent-state`. It contains current state, committed transcript segments, recent events, and watch rules. Poll it while listening; use normal browser controls for discovery, navigation, and seeking.
 
 Do not rely on `window.LiveSignalAgent` from an isolated browser-automation world. The global API remains available to same-world integrations, while the DOM output is the interoperable Codex browser-control path.
 

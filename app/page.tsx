@@ -1186,19 +1186,23 @@ export default function Home() {
 
   useEffect(() => {
     const page = document as ModelDocument;
-    if (!page.modelContext) {
-      window.setTimeout(() => setMcp("unavailable"), 0);
-      return;
-    }
-    if (registered.current) return;
-    registered.current = true;
+    const shouldRegisterWebMcp = Boolean(
+      page.modelContext && !registered.current,
+    );
+    if (shouldRegisterWebMcp) registered.current = true;
     const jobs: Promise<void>[] = [];
+    const toolHandlers = new Map<
+      string,
+      (input: Record<string, unknown>) => unknown
+    >();
     const tool = (
       name: string,
       description: string,
       execute: (input: Record<string, unknown>) => unknown,
       inputSchema?: object,
-    ) =>
+    ) => {
+      toolHandlers.set(name, execute);
+      if (!shouldRegisterWebMcp) return;
       jobs.push(
         page.modelContext!.registerTool({
           name,
@@ -1207,6 +1211,7 @@ export default function Home() {
           inputSchema,
         }),
       );
+    };
 
     tool(
       "get_workspace_state",
@@ -2060,9 +2065,56 @@ export default function Home() {
       "Downloads the current human-reviewed report as Markdown with clickable timestamp citations.",
       () => downloadReport(),
     );
-    Promise.all(jobs)
-      .then(() => setMcp("registered"))
-      .catch(() => setMcp("error"));
+    const bridgeId = "livesignal-page-agent-bridge";
+    const existingBridge = document.getElementById(bridgeId);
+    const bridge = existingBridge ?? document.createElement("output");
+    bridge.id = bridgeId;
+    bridge.hidden = true;
+    bridge.setAttribute("aria-hidden", "true");
+    bridge.dataset.status = "ready";
+    bridge.dataset.toolCount = String(toolHandlers.size);
+    if (!existingBridge) document.body.appendChild(bridge);
+
+    const onBridgeCall = async () => {
+      let request: Record<string, unknown> = {};
+      try {
+        request = JSON.parse(bridge.dataset.request ?? "{}");
+        const requestId = String(request.requestId ?? "");
+        const name = String(request.name ?? "");
+        const execute = toolHandlers.get(name);
+        if (!requestId || !execute)
+          throw new Error(`Unknown LiveSignal page tool: ${name || "missing"}`);
+        const input =
+          request.input && typeof request.input === "object"
+            ? (request.input as Record<string, unknown>)
+            : {};
+        const result = await execute(input);
+        bridge.textContent = JSON.stringify({ requestId, ok: true, result });
+      } catch (error) {
+        bridge.textContent = JSON.stringify({
+          requestId: String(request.requestId ?? ""),
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      window.dispatchEvent(new Event("livesignal:page-tool-result"));
+    };
+    window.addEventListener("livesignal:page-tool-call", onBridgeCall);
+    document.documentElement.dataset.livesignalPageAgent = "ready";
+
+    if (shouldRegisterWebMcp) {
+      Promise.all(jobs)
+        .then(() => setMcp("registered"))
+        .catch(() => setMcp("error"));
+    } else if (!page.modelContext) {
+      window.setTimeout(() => setMcp("unavailable"), 0);
+    }
+
+    return () => {
+      window.removeEventListener("livesignal:page-tool-call", onBridgeCall);
+      if (!existingBridge) bridge.remove();
+      delete document.documentElement.dataset.livesignalPageAgent;
+    };
     // Tool handlers use the live ref so calls always read current visible state.
     // Registration must run once: rerunning would duplicate the page's tools.
     // eslint-disable-next-line react-hooks/exhaustive-deps
