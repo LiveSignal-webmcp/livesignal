@@ -118,6 +118,25 @@ function searchCard({ title, url, channel, live = true, metadata = [] }) {
   };
 }
 
+test("the packaged Chrome adapter pairs with the production canvas", async () => {
+  const manifest = JSON.parse(
+    await readFile(new URL("../extension/manifest.json", import.meta.url), "utf8"),
+  );
+  const companionRegistration = manifest.content_scripts.find((entry) =>
+    entry.js.includes("companion-bridge.js"),
+  );
+
+  assert.ok(
+    manifest.host_permissions.includes("https://livesignal-chi.vercel.app/*"),
+  );
+  assert.ok(companionRegistration);
+  assert.ok(
+    companionRegistration.matches.includes(
+      "https://livesignal-chi.vercel.app/*",
+    ),
+  );
+});
+
 test("paired browser bridge exposes the same nine handlers as WebMCP", async () => {
   const { document, registrations, window } = await loadAdapter();
   const webmcpTools = [...registrations.keys()].sort();

@@ -51,4 +51,10 @@ Realtime transcription requires the deployed LiveSignal Companion to have an `EL
 
 The in-page badge distinguishes WebMCP registration, paired-agent readiness, realtime listening, and errors.
 
+## ChatGPT browser-extension mode
+
+The production Companion at `https://livesignal-chi.vercel.app` is included in the extension's host permissions and receives `companion-bridge.js` automatically. A ChatGPT extension agent can therefore open the normal site, discover its accessible research and canvas controls, and operate the complete visible workflow. When Chrome exposes WebMCP, the page registers its structured tools directly; the visible UI remains the compatibility path for browser-control agents.
+
+On the Companion page, verify that the header reports the WebMCP tool count and that `document.documentElement.dataset.livesignalCompanionBridge` is `ready`. The extension agent can load or import a research project, select canvas cards, edit fields, submit block-scoped comments, and download the finished artifact through ordinary labelled controls.
+
 This is a hackathon prototype, not an official YouTube or Twitch integration.
