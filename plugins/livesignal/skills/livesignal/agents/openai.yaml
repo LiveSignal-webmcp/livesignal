@@ -1,4 +1,4 @@
 interface:
   display_name: "LiveSignal"
-  short_description: "Co-create cited canvases from videos"
-  default_prompt: "Use $livesignal to research this topic across YouTube and co-create a shareable visual canvas with timestamped evidence."
+  short_description: "Research and comment on cited video canvases"
+  default_prompt: "Use $livesignal to research this topic across YouTube, co-create a shareable visual canvas with timestamped evidence, and respond to my canvas comments in context."

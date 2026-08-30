@@ -46,6 +46,11 @@ test("server-renders a clean universal video research workspace", async () => {
   assert.match(html, /Evidence draft/);
   assert.match(html, /Download PNG/i);
   assert.match(html, /Human ↔ agent loop/i);
+  assert.match(html, /Comment for agent/i);
+  assert.match(html, /This card/i);
+  assert.match(html, /Whole canvas/i);
+  assert.match(html, /Send to agent/i);
+  assert.match(html, /Agent inbox/i);
   assert.match(html, /Download \.md/i);
   assert.match(html, /Waiting for ChatGPT/i);
   assert.match(html, /The shared artifact starts here/i);

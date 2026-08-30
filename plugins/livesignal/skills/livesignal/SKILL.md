@@ -15,11 +15,14 @@ Use LiveSignal as a shared video research and creation desk operated primarily t
 4. If ChatGPT reads captions or source moments in another browser tab, call `record_video_evidence` on LiveSignal with the source metadata and timestamped excerpts. This is the primary cross-tab path in ChatGPT's built-in browser.
 5. The optional Chrome extension is a fallback for native-caption capture or one-time user-approved realtime STT. Import its latest snapshot from the page's manual fallback control when needed.
 6. Search the imported evidence, keep timestamped excerpts, and use `write_report` to create the evidence draft. Then call `create_canvas` once to turn it into a shareable visual artifact. Keep researched claims connected to evidence IDs; personal notes may remain uncited only when clearly presented as personal content.
-7. Treat the human's canvas order, block sizes, theme, and wording as intentional. During active collaboration, call `get_canvas_state` and `get_human_revisions` before making a canvas change. Use the smallest scoped tool—normally `update_canvas_block`, `add_canvas_block`, or `reorder_canvas_blocks`—instead of recreating the whole canvas.
-8. React to the human's revision in context: explain what changed, protect citation meaning, shorten copy to fit when requested, or flag a missing source. Then call `acknowledge_human_revisions`. Do not claim an idle agent will wake itself; the revision stream is available while the agent is active in the browser session.
-9. Call `set_canvas_theme` only for a human-requested or clearly relevant visual direction. Never replace the complete canvas after the human has edited it unless they explicitly ask to start over.
-10. Revise only as requested, preserve citations and caveats, and call `publish_report` only after the human approves the result.
-11. When the human asks for the shareable result, call `download_canvas_png`. Use `download_report` for the underlying Markdown research; it must retain clickable YouTube timestamp citations.
+7. Treat the human's canvas order, block sizes, theme, and wording as intentional. During active collaboration, call `get_canvas_state`, `get_human_revisions`, and `get_agent_comments` before making a canvas change. Use the smallest scoped tool—normally `update_canvas_block`, `add_canvas_block`, or `reorder_canvas_blocks`—instead of recreating the whole canvas.
+8. For each open canvas comment, call `claim_agent_comment` before researching so the human sees that work has started. The comment contains its canvas scope, a frozen copy of the selected block, and its evidence IDs. Use those details as context; do not ask the human to repeat the request in chat.
+9. Research the comment with additional YouTube sources when it asks to verify, find more, or add another perspective. Record new timestamped excerpts with `record_video_evidence`, then make only the requested canvas change. Call `answer_agent_comment` with a concise result, all added evidence IDs, and all updated block IDs so the answer is inspectable in the shared thread.
+   - When the human is actively composing and asks you to stay with the canvas, call `wait_for_agent_comment` with a wait of up to 30 seconds. Claim and handle a returned comment immediately. If it returns `idle`, call it again only while the live collaboration session remains active; do not imply that you can keep listening after the agent turn ends.
+10. React to ordinary human revisions in context: explain what changed, protect citation meaning, shorten copy to fit when requested, or flag a missing source. Then call `acknowledge_human_revisions`. Do not claim an idle agent will wake itself; comments are exposed immediately to an active WebMCP agent and remain queued on the page otherwise.
+11. Call `set_canvas_theme` only for a human-requested or clearly relevant visual direction. Never replace the complete canvas after the human has edited it unless they explicitly ask to start over.
+12. Revise only as requested, preserve citations and caveats, and call `publish_report` only after the human approves the result.
+13. When the human asks for the shareable result, call `download_canvas_png`. Use `download_report` for the underlying Markdown research; it must retain clickable YouTube timestamp citations.
 
 ## Canvas collaboration contract
 
@@ -28,6 +31,7 @@ Use LiveSignal as a shared video research and creation desk operated primarily t
 - Keep layout edits local. A request to shorten one card does not authorize rewriting other cards.
 - If moving or rewriting a claim would change its meaning, preserve its evidence IDs and verify the supporting excerpt first.
 - Treat pending human revisions as collaboration events, not instructions to regenerate from scratch.
+- Treat canvas comments as actionable research tickets. Claim one, investigate it, update its scoped card or the whole canvas as requested, then answer it visibly. Never mark a comment answered before the research and canvas edits are complete.
 - Prefer a small number of visually distinct blocks with concise copy over placing the full transcript or report on the canvas.
 
 ## Livestream adapter workflow
@@ -69,3 +73,4 @@ Use this fallback only on a page where the LiveSignal extension is active. Do no
 - “This stream has no native transcript. Approve LiveSignal once for this tab; after that I can listen and search streams here without another click.”
 - “I imported three videos about solid-state batteries, found five timestamped passages about manufacturing cost, and drafted the editable comparison in LiveSignal.”
 - “I kept your new layout, shortened the preparation card to fit, and preserved its two source moments. The canvas is ready for your review or PNG export.”
+- “I picked up your note on the temperature card, checked two more brewing videos, and added the dark-roast exception with both new timestamps.”

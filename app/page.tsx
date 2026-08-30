@@ -85,6 +85,27 @@ type HumanRevision = {
   acknowledged: boolean;
 };
 
+type AgentCommentKind = "research-more" | "verify" | "counterpoint" | "improve";
+type AgentCommentStatus = "pending" | "researching" | "answered";
+
+type AgentComment = {
+  id: string;
+  kind: AgentCommentKind;
+  query: string;
+  blockId?: string;
+  blockTitle?: string;
+  blockBody?: string;
+  evidenceIds: string[];
+  status: AgentCommentStatus;
+  createdAt: string;
+  claimedAt?: string;
+  answeredAt?: string;
+  plan?: string;
+  response?: string;
+  addedEvidenceIds: string[];
+  updatedBlockIds: string[];
+};
+
 type ModelDocument = Document & {
   modelContext?: {
     registerTool: (tool: {
@@ -108,7 +129,33 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 27;
+const TOOL_COUNT = 31;
+const AGENT_COMMENT_KINDS: Array<{
+  id: AgentCommentKind;
+  label: string;
+  prompt: string;
+}> = [
+  {
+    id: "research-more",
+    label: "Find more",
+    prompt: "What is missing, unclear, or worth researching further?",
+  },
+  {
+    id: "verify",
+    label: "Verify",
+    prompt: "Which claim should the agent verify against more video sources?",
+  },
+  {
+    id: "counterpoint",
+    label: "Other view",
+    prompt: "What alternative perspective should the agent look for?",
+  },
+  {
+    id: "improve",
+    label: "Improve",
+    prompt: "How should the agent strengthen this part of the canvas?",
+  },
+];
 const PHASES: Array<{ id: RunPhase; label: string }> = [
   { id: "discovering", label: "Discover" },
   { id: "extracting", label: "Extract" },
@@ -184,6 +231,13 @@ export default function Home() {
   const [runPhase, setRunPhase] = useState<RunPhase>("ready");
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [humanRevisions, setHumanRevisions] = useState<HumanRevision[]>([]);
+  const [agentComments, setAgentComments] = useState<AgentComment[]>([]);
+  const [agentCommentKind, setAgentCommentKind] =
+    useState<AgentCommentKind>("research-more");
+  const [agentCommentQuery, setAgentCommentQuery] = useState("");
+  const [agentCommentScope, setAgentCommentScope] =
+    useState<"block" | "canvas">("block");
+  const [agentListening, setAgentListening] = useState(false);
   const [canvasBlocks, setCanvasBlocks] = useState<CanvasBlock[]>([]);
   const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>("notebook");
   const [selectedCanvasId, setSelectedCanvasId] = useState("");
@@ -202,6 +256,7 @@ export default function Home() {
     "checking" | "registered" | "unavailable" | "error"
   >("checking");
   const registered = useRef(false);
+  const agentCommentInputRef = useRef<HTMLTextAreaElement>(null);
 
   const focusEvidence = useMemo(
     () => evidence.find((item) => item.id === focusEvidenceId) ?? evidence[0],
@@ -219,11 +274,23 @@ export default function Home() {
     () => humanRevisions.filter((revision) => !revision.acknowledged),
     [humanRevisions],
   );
+  const openAgentComments = useMemo(
+    () => agentComments.filter((comment) => comment.status !== "answered"),
+    [agentComments],
+  );
   const selectedCanvasBlock = useMemo(
     () =>
       canvasBlocks.find((block) => block.id === selectedCanvasId) ??
       canvasBlocks[0],
     [canvasBlocks, selectedCanvasId],
+  );
+  const visibleAgentComments = useMemo(
+    () =>
+      agentComments.filter(
+        (comment) =>
+          !comment.blockId || comment.blockId === selectedCanvasBlock?.id,
+      ).slice(-4).reverse(),
+    [agentComments, selectedCanvasBlock?.id],
   );
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -240,6 +307,7 @@ export default function Home() {
     runPhase,
     agentEvents,
     humanRevisions,
+    agentComments,
     canvasBlocks,
     canvasTheme,
   });
@@ -258,6 +326,7 @@ export default function Home() {
       runPhase,
       agentEvents,
       humanRevisions,
+      agentComments,
       canvasBlocks,
       canvasTheme,
     };
@@ -274,6 +343,7 @@ export default function Home() {
     runPhase,
     agentEvents,
     humanRevisions,
+    agentComments,
     canvasBlocks,
     canvasTheme,
   ]);
@@ -317,6 +387,107 @@ export default function Home() {
         detail: { field, value: detail, createdAt: now },
       }),
     );
+  }
+
+  function createAgentComment(
+    query: string,
+    kind: AgentCommentKind,
+    blockId?: string,
+  ) {
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return null;
+    const block = live.current.canvasBlocks.find((item) => item.id === blockId);
+    const comment: AgentComment = {
+      id: `comment-${crypto.randomUUID()}`,
+      kind,
+      query: cleanQuery,
+      blockId: block?.id,
+      blockTitle: block?.title,
+      blockBody: block?.body,
+      evidenceIds: block?.evidenceIds ?? [],
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      addedEvidenceIds: [],
+      updatedBlockIds: [],
+    };
+    setAgentComments((current) => [...current.slice(-11), comment]);
+    setPublished(false);
+    addAgentEvent(
+      "Human asked the agent",
+      block ? `${block.title} · ${cleanQuery}` : `Whole canvas · ${cleanQuery}`,
+    );
+    setActivity("Comment sent · ready for agent research");
+    window.dispatchEvent(
+      new CustomEvent("livesignal:agent-comment", { detail: comment }),
+    );
+    return comment;
+  }
+
+  function submitAgentComment() {
+    const blockId =
+      agentCommentScope === "block" ? selectedCanvasBlock?.id : undefined;
+    const comment = createAgentComment(
+      agentCommentQuery,
+      agentCommentKind,
+      blockId,
+    );
+    if (!comment) return;
+    setAgentCommentQuery("");
+  }
+
+  function claimAgentComment(id: string, plan?: string) {
+    const existing = live.current.agentComments.find((item) => item.id === id);
+    if (!existing)
+      return { ok: false, error: "Agent comment not found." };
+    const claimedAt = new Date().toISOString();
+    setAgentComments((current) =>
+      current.map((comment) =>
+        comment.id === id
+          ? {
+              ...comment,
+              status: "researching",
+              claimedAt,
+              plan: plan?.trim() || "Reviewing the request and source evidence",
+            }
+          : comment,
+      ),
+    );
+    addAgentEvent("Agent picked up a comment", existing.query);
+    setActivity("Agent is researching your canvas comment");
+    return { ok: true, commentId: id, status: "researching" };
+  }
+
+  function answerAgentComment(
+    id: string,
+    response: string,
+    addedEvidenceIds: string[],
+    updatedBlockIds: string[],
+  ) {
+    const existing = live.current.agentComments.find((item) => item.id === id);
+    if (!existing)
+      return { ok: false, error: "Agent comment not found." };
+    const cleanResponse = response.trim();
+    if (!cleanResponse)
+      return { ok: false, error: "A concise answer is required." };
+    const answeredAt = new Date().toISOString();
+    setAgentComments((current) =>
+      current.map((comment) =>
+        comment.id === id
+          ? {
+              ...comment,
+              status: "answered",
+              answeredAt,
+              response: cleanResponse,
+              addedEvidenceIds,
+              updatedBlockIds,
+            }
+          : comment,
+      ),
+    );
+    addAgentEvent("Agent answered a canvas comment", cleanResponse);
+    setActivity("New research returned to the canvas");
+    window.location.hash = "canvas";
+    return { ok: true, commentId: id, status: "answered" };
   }
 
   function reportMarkdown() {
@@ -501,6 +672,7 @@ export default function Home() {
     setCanvasTheme("notebook");
     setCanvasView("canvas");
     setHumanRevisions([]);
+    setAgentComments([]);
     setPublished(false);
     setIngestError("");
     setRunPhase("discovering");
@@ -534,6 +706,7 @@ export default function Home() {
     seedCanvas(example.sections);
     setCanvasTheme("notebook");
     setHumanRevisions([]);
+    setAgentComments([]);
     setPublished(false);
     setIngestError("");
     setRunPhase("review");
@@ -897,6 +1070,7 @@ export default function Home() {
       seedCanvas(sections);
       setCanvasTheme("notebook");
       setHumanRevisions([]);
+      setAgentComments([]);
       setPublished(false);
       setRunPhase("review");
       setAgentResultError("");
@@ -1033,6 +1207,131 @@ export default function Home() {
           all: { type: "boolean" },
           revisionIds: { type: "array", items: { type: "string" } },
         },
+      },
+    );
+    tool(
+      "get_agent_comments",
+      "Returns actionable comments the human attached to a canvas block or the whole artifact. Check for pending comments during active collaboration, then research and answer them with evidence-backed canvas updates.",
+      (input) => {
+        const requestedStatus = String(input.status ?? "open");
+        const comments = live.current.agentComments.filter((comment) =>
+          requestedStatus === "all"
+            ? true
+            : requestedStatus === "open"
+              ? comment.status !== "answered"
+              : comment.status === requestedStatus,
+        );
+        return {
+          comments,
+          canvas: {
+            title: live.current.reportTitle,
+            overview: live.current.reportOverview,
+            theme: live.current.canvasTheme,
+            blocks: live.current.canvasBlocks,
+          },
+          evidence: live.current.evidence,
+          sources: live.current.sources,
+        };
+      },
+      {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            enum: ["open", "pending", "researching", "answered", "all"],
+          },
+        },
+      },
+    );
+    tool(
+      "wait_for_agent_comment",
+      "Waits briefly for the human's next canvas comment and returns it with block and evidence context as soon as it is sent. Use during an active co-creation session after telling the human you are listening.",
+      async (input) => {
+        const existing = live.current.agentComments.find(
+          (comment) => comment.status === "pending",
+        );
+        if (existing) return { status: "comment", comment: existing };
+        const requestedMs = Number(input.timeoutMs ?? 30000);
+        const timeoutMs = Math.max(1000, Math.min(requestedMs, 45000));
+        setAgentListening(true);
+        setActivity("Agent is listening for your next canvas comment");
+        return await new Promise((resolve) => {
+          let settled = false;
+          const finish = (result: Record<string, unknown>) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            window.removeEventListener(
+              "livesignal:agent-comment",
+              onComment as EventListener,
+            );
+            setAgentListening(false);
+            resolve(result);
+          };
+          const onComment = (event: Event) => {
+            const detail = (event as CustomEvent<AgentComment>).detail;
+            finish({ status: "comment", comment: detail });
+          };
+          const timeoutId = window.setTimeout(
+            () => finish({ status: "idle", waitedMs: timeoutMs }),
+            timeoutMs,
+          );
+          window.addEventListener(
+            "livesignal:agent-comment",
+            onComment as EventListener,
+          );
+        });
+      },
+      {
+        type: "object",
+        properties: {
+          timeoutMs: {
+            type: "number",
+            description: "Wait duration in milliseconds, capped at 45000.",
+          },
+        },
+      },
+    );
+    tool(
+      "claim_agent_comment",
+      "Marks one human canvas comment as actively being researched and shows the agent's plan in the shared interface. Call before opening more videos or changing the canvas.",
+      (input) =>
+        claimAgentComment(
+          String(input.commentId ?? ""),
+          input.plan === undefined ? undefined : String(input.plan),
+        ),
+      {
+        type: "object",
+        properties: {
+          commentId: { type: "string" },
+          plan: { type: "string" },
+        },
+        required: ["commentId"],
+      },
+    );
+    tool(
+      "answer_agent_comment",
+      "Closes one human canvas comment after the agent has researched it and made any scoped canvas change. Summarize what was learned and identify new evidence or updated blocks so the human can inspect the result.",
+      (input) =>
+        answerAgentComment(
+          String(input.commentId ?? ""),
+          String(input.response ?? ""),
+          Array.isArray(input.addedEvidenceIds)
+            ? input.addedEvidenceIds.map(String)
+            : [],
+          Array.isArray(input.updatedBlockIds)
+            ? input.updatedBlockIds.map(String)
+            : [],
+        ),
+      {
+        type: "object",
+        properties: {
+          commentId: { type: "string" },
+          response: { type: "string" },
+          addedEvidenceIds: { type: "array", items: { type: "string" } },
+          updatedBlockIds: { type: "array", items: { type: "string" } },
+        },
+        required: ["commentId", "response"],
       },
     );
     tool(
@@ -2269,13 +2568,33 @@ export default function Home() {
                             <div className="canvas-block-topline">
                               <span>{String(index + 1).padStart(2, "0")}</span>
                               <b>{block.kind}</b>
-                              <button
-                                type="button"
-                                aria-label={`Edit ${block.title}`}
-                                onClick={() => setSelectedCanvasId(block.id)}
-                              >
-                                Edit · ⋮⋮
-                              </button>
+                              <div className="canvas-block-actions">
+                                {agentComments.some(
+                                  (comment) =>
+                                    comment.blockId === block.id &&
+                                    comment.status !== "answered",
+                                ) && <i>● OPEN</i>}
+                                <button
+                                  type="button"
+                                  aria-label={`Ask agent about ${block.title}`}
+                                  onClick={() => {
+                                    setSelectedCanvasId(block.id);
+                                    setAgentCommentScope("block");
+                                    window.requestAnimationFrame(() =>
+                                      agentCommentInputRef.current?.focus(),
+                                    );
+                                  }}
+                                >
+                                  Ask agent
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Edit ${block.title}`}
+                                  onClick={() => setSelectedCanvasId(block.id)}
+                                >
+                                  Edit · ⋮⋮
+                                </button>
+                              </div>
                             </div>
                             <h3>{block.title}</h3>
                             <p>{block.body}</p>
@@ -2312,19 +2631,139 @@ export default function Home() {
               <aside className="canvas-inspector">
                 <div
                   className={`canvas-collab-card ${
-                    pendingHumanRevisions.length ? "pending" : ""
+                    pendingHumanRevisions.length || openAgentComments.length
+                      ? "pending"
+                      : ""
                   }`}
                 >
                   <span>HUMAN ↔ AGENT LOOP</span>
                   <b>
-                    {pendingHumanRevisions.length
+                    {openAgentComments.length
+                      ? `${openAgentComments.length} comment${openAgentComments.length === 1 ? "" : "s"} in the agent loop`
+                      : pendingHumanRevisions.length
                       ? `${pendingHumanRevisions.length} change${pendingHumanRevisions.length === 1 ? "" : "s"} ready for agent reaction`
                       : "Canvas and agent are caught up"}
                   </b>
                   <p>
-                    Dragging, rewriting, resizing, or restyling creates a
-                    structured WebMCP revision without replacing your canvas.
+                    Edit the artifact directly or leave an actionable comment.
+                    The agent receives the selected block, its citations, and
+                    your exact question through WebMCP.
                   </p>
+                </div>
+
+                <div className="agent-comment-desk">
+                  <div className="agent-comment-heading">
+                    <div>
+                      <span>COMMENT FOR AGENT</span>
+                      <b>
+                        {agentCommentScope === "block" && selectedCanvasBlock
+                          ? selectedCanvasBlock.title
+                          : "Whole canvas"}
+                      </b>
+                    </div>
+                    <i className={`agent-presence ${mcp} ${agentListening ? "listening" : ""}`}>
+                      {agentListening
+                        ? "● AGENT LISTENING"
+                        : mcp === "registered"
+                          ? "WEBMCP LIVE"
+                          : "AGENT INBOX"}
+                    </i>
+                  </div>
+                  <div className="agent-comment-scope" aria-label="Comment scope">
+                    <button
+                      type="button"
+                      className={agentCommentScope === "block" ? "active" : ""}
+                      disabled={!selectedCanvasBlock}
+                      onClick={() => setAgentCommentScope("block")}
+                    >
+                      This card
+                    </button>
+                    <button
+                      type="button"
+                      className={agentCommentScope === "canvas" ? "active" : ""}
+                      onClick={() => setAgentCommentScope("canvas")}
+                    >
+                      Whole canvas
+                    </button>
+                  </div>
+                  <div className="agent-comment-kinds">
+                    {AGENT_COMMENT_KINDS.map((kind) => (
+                      <button
+                        type="button"
+                        className={agentCommentKind === kind.id ? "active" : ""}
+                        key={kind.id}
+                        onClick={() => setAgentCommentKind(kind.id)}
+                      >
+                        {kind.label}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    ref={agentCommentInputRef}
+                    value={agentCommentQuery}
+                    aria-label="Comment for agent"
+                    placeholder={
+                      AGENT_COMMENT_KINDS.find(
+                        (kind) => kind.id === agentCommentKind,
+                      )?.prompt
+                    }
+                    onChange={(event) => setAgentCommentQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        event.preventDefault();
+                        submitAgentComment();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="send-agent-comment"
+                    disabled={!agentCommentQuery.trim()}
+                    onClick={submitAgentComment}
+                  >
+                    <span>Send to agent</span>
+                    <small>⌘↵</small>
+                  </button>
+                  <p className="agent-comment-boundary">
+                    The active WebMCP agent can pick this up without you
+                    repeating context in chat.
+                  </p>
+
+                  {visibleAgentComments.length > 0 && (
+                    <div className="agent-comment-thread" aria-live="polite">
+                      {visibleAgentComments.map((comment) => (
+                        <article className={`agent-comment ${comment.status}`} key={comment.id}>
+                          <div>
+                            <span>
+                              {comment.blockTitle ?? "Whole canvas"} · {comment.kind.replace("-", " ")}
+                            </span>
+                            <i>{comment.status}</i>
+                          </div>
+                          <p>{comment.query}</p>
+                          {comment.status === "researching" && (
+                            <small>
+                              <b>Agent is researching</b>
+                              {comment.plan ? ` · ${comment.plan}` : ""}
+                            </small>
+                          )}
+                          {comment.status === "answered" && comment.response && (
+                            <small>
+                              <b>Agent answer</b> · {comment.response}
+                              {(comment.addedEvidenceIds.length > 0 ||
+                                comment.updatedBlockIds.length > 0) && (
+                                <em>
+                                  +{comment.addedEvidenceIds.length} evidence · {comment.updatedBlockIds.length} card update{comment.updatedBlockIds.length === 1 ? "" : "s"}
+                                </em>
+                              )}
+                            </small>
+                          )}
+                          {comment.status === "pending" && (
+                            <small><b>Queued for the active agent</b></small>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="canvas-control-group theme-picker">
@@ -2463,11 +2902,6 @@ export default function Home() {
                 >
                   + Add my own note
                 </button>
-                <p className="canvas-agent-hint">
-                  <span>TRY WITH CHATGPT</span>
-                  “I moved the schedule to the top. Shorten it and make the
-                  practical constraint more prominent.”
-                </p>
               </aside>
             </section>
           ) : (
