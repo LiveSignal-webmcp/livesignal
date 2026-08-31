@@ -25,15 +25,15 @@ Show the agent using the page tools to create the brief, add sources, record tim
 
 Drag the most useful card to the top, make it wide, switch the canvas mood, edit one title, and add a personal note. Explain that every action creates a structured revision event in the same page—order, copy, size, and theme—not an opaque DOM mutation.
 
-### 1:28–1:58 — agent reaction
+### 1:28–1:53 — agent reaction
 
-Ask ChatGPT: “I moved the practical constraint to the top. Shorten it so it fits and make sure the claim is still supported.”
+Click “Save & send to agent.” Do not send another ChatGPT message. The waiting agent receives the semantic change batch, understands that the card is now more prominent, shortens only that card, and preserves its evidence.
 
-Show the agent reading `get_canvas_state` and `get_human_revisions`, then using a scoped `update_canvas_block` call. The human's order and other cards remain unchanged. The evidence markers stay attached. Show the revision state return to caught up.
+Show `wait_for_collaboration_event` return the saved layout change, followed by a scoped `update_canvas_block` call. The human's order and other cards remain unchanged. The evidence markers stay attached. Show the revision state return to caught up and the agent resume listening.
 
-### 1:58–2:18 — co-create one more idea
+### 1:53–2:18 — art-direct together
 
-Ask: “Add one missing tip from the sources as a small note.” Show the agent add a single cited block. Then manually tweak its title. This is the collaboration: research judgment and layout judgment alternate on one visible artifact.
+Select one card, choose “Create visual,” and comment: “Make this a warm hand-drawn editorial illustration.” The listening agent claims the comment and calls `generate_canvas_image` for that card. Show the image appear with the “AI-generated illustration” label while the written evidence markers remain separate. This is the collaboration: research judgment, human art direction, and agent creation alternate on one visible artifact.
 
 ### 2:18–2:30 — share
 

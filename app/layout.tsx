@@ -8,7 +8,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = host.startsWith("localhost") ? "http" : "https";
   const title = "LiveSignal — research anything across YouTube";
   const description =
-    "Import YouTube videos, search timestamped evidence, and create editable reports together with your agent.";
+    "Turn YouTube research into a cited visual canvas you can shape, illustrate, and share together with your agent.";
 
   return {
     metadataBase: new URL(`${protocol}://${host}`),

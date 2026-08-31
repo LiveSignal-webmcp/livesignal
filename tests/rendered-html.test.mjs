@@ -61,6 +61,10 @@ test("exposes renewable WebMCP collaboration and browser-agent tools", async () 
   assert.match(page, /"start_canvas_collaboration"/);
   assert.match(page, /"wait_for_collaboration_event"/);
   assert.match(page, /"finish_canvas_collaboration"/);
+  assert.match(page, /"generate_canvas_image"/);
+  assert.match(page, /Create visual/);
+  assert.match(page, /AI-GENERATED ILLUSTRATION/);
+  assert.match(page, /Ask agent to create/);
   assert.match(page, /Save &amp; send to agent|Save & send to agent/);
   assert.match(page, /Save for agent/);
   assert.match(page, /Move earlier/);
@@ -71,5 +75,18 @@ test("exposes renewable WebMCP collaboration and browser-agent tools", async () 
   const toolNames = [
     ...page.matchAll(/\btool\(\s*\n?\s*"([^"]+)"/g),
   ].map((match) => match[1]);
-  assert.equal(new Set(toolNames).size, 35);
+  assert.equal(new Set(toolNames).size, 36);
+});
+
+test("keeps generated image bytes server-side and labels them as illustration", async () => {
+  const route = await readFile(
+    new URL("../app/api/images/generate/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /OPENAI_API_KEY/);
+  assert.match(route, /gpt-image-1-mini/);
+  assert.match(route, /output_format:\s*"webp"/);
+  assert.match(route, /This is an AI-generated illustration, not documentary evidence/);
+  assert.match(route, /X-LiveSignal-Image-Model/);
+  assert.doesNotMatch(route, /apiKey[^\n]*return/i);
 });

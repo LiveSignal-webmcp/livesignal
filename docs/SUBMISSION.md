@@ -10,11 +10,11 @@ Useful knowledge is scattered across hours of video. An agent can summarize it, 
 
 ## What it does
 
-LiveSignal is a WebMCP-powered research and creation desk. An agent can create a brief, select YouTube sources, record timestamped evidence, and draft a visual guide. The human can then move, resize, rewrite, restyle, or add blocks on the same canvas. Those edits become structured revision events the active agent can inspect and react to without replacing the human's composition. The result exports as a shareable PNG, while the underlying evidence report remains downloadable as Markdown.
+LiveSignal is a WebMCP-powered research and creation desk. An agent can create a brief, select YouTube sources, record timestamped evidence, and draft a visual guide. The human can then move, resize, rewrite, restyle, or add blocks on the same canvas. Those edits become structured revision events the active agent can inspect and react to without replacing the human's composition. A human can also art-direct an illustration from any selected card through the same comment loop; the generated artwork is visibly labelled and kept separate from evidence. The result exports as a shareable PNG, while the underlying evidence report remains downloadable as Markdown.
 
 ## How we built it
 
-The web app registers semantic WebMCP tools for the entire workflow: research setup, source and evidence ingestion, report writing, canvas creation, scoped block updates, ordering, theme changes, revision acknowledgement, source navigation, and export. The React canvas stores source IDs and evidence IDs with each research block. A Manifest V3 adapter supplies a compatibility path for evidence gathered on existing YouTube and Twitch pages, including optional user-approved realtime transcription.
+The web app registers 36 semantic WebMCP tools for the entire workflow: research setup, source and evidence ingestion, report writing, canvas creation, renewable collaboration waits, scoped block updates, human comments, card illustration, ordering, theme changes, revision acknowledgement, source navigation, and export. The React canvas stores source IDs and evidence IDs with each research block. AI-generated image bytes are returned through a same-origin server route and kept out of WebMCP payloads. A Manifest V3 adapter supplies a compatibility path for evidence gathered on existing YouTube and Twitch pages, including optional user-approved realtime transcription.
 
 ## Challenges we ran into
 
@@ -25,6 +25,7 @@ The first version stopped when the report was generated. That was useful automat
 - One visible artifact shared by a human and an agent instead of a hidden agent workflow.
 - Structured canvas tools for scoped edits, reordering, themes, and export.
 - A revision stream that lets an active agent respond to human changes without wiping them out.
+- Human-directed card illustrations created inside the same live collaboration thread, without confusing artwork with source proof.
 - Timestamp evidence that remains attached as content moves through the layout.
 - A universal blank-state flow that judges can test with a topic of their choice.
 

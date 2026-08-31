@@ -1,28 +1,28 @@
 {
   "name": "livesignal",
-  "version": "0.2.1",
-  "description": "Pair browser control with LiveSignal for evidence-first livestream research.",
+  "version": "0.3.0",
+  "description": "Research video knowledge and co-create cited, illustrated canvases with LiveSignal.",
   "author": {
     "name": "LiveSignal"
   },
   "homepage": "https://livesignal-chi.vercel.app",
   "repository": "https://github.com/LiveSignal-webmcp/livesignal",
   "license": "MIT",
-  "keywords": ["webmcp", "livestream", "browser-agent", "transcription"],
+  "keywords": ["webmcp", "video-research", "browser-agent", "collaboration", "canvas"],
   "skills": "./skills/",
   "interface": {
     "displayName": "LiveSignal",
-    "shortDescription": "Research livestreams with timestamped evidence.",
-    "longDescription": "Pair browser navigation with LiveSignal's WebMCP tools, realtime transcript evidence, search, watch rules, and timestamp navigation.",
+    "shortDescription": "Turn video research into cited visual canvases.",
+    "longDescription": "Pair browser navigation with LiveSignal's WebMCP tools to research videos, preserve timestamped evidence, respond to human canvas edits, and create clearly labeled illustrations on request.",
     "developerName": "LiveSignal",
     "category": "Productivity",
     "capabilities": [],
     "websiteURL": "https://livesignal-chi.vercel.app",
     "brandColor": "#D8FF45",
     "defaultPrompt": [
-      "Find a relevant livestream and summarize it with evidence.",
-      "What are they discussing in this live stream right now?",
-      "Watch this stream for a specific topic and show me the moment."
+      "Research this topic across relevant videos and build a cited canvas.",
+      "Respond to my canvas comments and improve the selected card.",
+      "Create a labeled illustration for this card without treating it as evidence."
     ]
   }
 }

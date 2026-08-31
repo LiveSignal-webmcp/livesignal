@@ -46,6 +46,15 @@ type CanvasBlockKind = "feature" | "steps" | "note" | "quote";
 type CanvasBlockSpan = "half" | "wide";
 type CanvasTheme = "notebook" | "editorial" | "field-notes";
 
+type CanvasImage = {
+  id: string;
+  url: string;
+  alt: string;
+  prompt: string;
+  model: string;
+  generatedAt: string;
+};
+
 type CanvasBlock = {
   id: string;
   kind: CanvasBlockKind;
@@ -54,6 +63,7 @@ type CanvasBlock = {
   evidenceIds: string[];
   span: CanvasBlockSpan;
   accent: "coral" | "sage" | "gold" | "ink";
+  image?: CanvasImage;
 };
 
 type AgentProjectPayload = {
@@ -116,7 +126,12 @@ type CanvasChangeBatch = {
   };
 };
 
-type AgentCommentKind = "research-more" | "verify" | "counterpoint" | "improve";
+type AgentCommentKind =
+  | "research-more"
+  | "verify"
+  | "counterpoint"
+  | "improve"
+  | "create-visual";
 type AgentCommentStatus = "pending" | "researching" | "answered";
 
 type AgentComment = {
@@ -160,7 +175,7 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 35;
+const TOOL_COUNT = 36;
 const ENTRY_SUGGESTIONS = [
   {
     label: "Plan a food trip",
@@ -207,6 +222,11 @@ const AGENT_COMMENT_KINDS: Array<{
     id: "improve",
     label: "Improve",
     prompt: "How should the agent strengthen this part of the canvas?",
+  },
+  {
+    id: "create-visual",
+    label: "Create visual",
+    prompt: "Describe the illustration you want the agent to create for this card.",
   },
 ];
 const PHASES: Array<{ id: RunPhase; label: string }> = [
@@ -307,6 +327,7 @@ export default function Home() {
   const [draggedCanvasId, setDraggedCanvasId] = useState("");
   const [canvasView, setCanvasView] = useState<"canvas" | "draft">("canvas");
   const [canvasExporting, setCanvasExporting] = useState(false);
+  const [imageGeneratingBlockId, setImageGeneratingBlockId] = useState("");
   const [published, setPublished] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [ingestStatus, setIngestStatus] = useState<
@@ -651,6 +672,20 @@ export default function Home() {
     setAgentCommentQuery("");
   }
 
+  function requestCanvasVisual(block: CanvasBlock, regenerate = false) {
+    setSelectedCanvasId(block.id);
+    setAgentCommentScope("block");
+    setAgentCommentKind("create-visual");
+    setAgentCommentQuery(
+      regenerate
+        ? `Create a new visual direction for this card. Keep the ${canvasTheme.replace("-", " ")} mood, but make the composition more distinctive and shareable.`
+        : `Create an editorial illustration for this card that matches the ${canvasTheme.replace("-", " ")} canvas mood.`,
+    );
+    window.requestAnimationFrame(() =>
+      agentCommentInputRef.current?.focus(),
+    );
+  }
+
   function claimAgentComment(id: string, plan?: string) {
     const existing = live.current.agentComments.find((item) => item.id === id);
     if (!existing)
@@ -776,6 +811,13 @@ export default function Home() {
     return { ok: true, filename, markdown };
   }
 
+  function revokeCanvasImages(blocks = live.current.canvasBlocks) {
+    blocks.forEach((block) => {
+      if (block.image?.url.startsWith("blob:"))
+        URL.revokeObjectURL(block.image.url);
+    });
+  }
+
   function seedCanvas(sections: ReportSection[]) {
     const blocks = canvasFromReport(sections);
     setCanvasBlocks(blocks);
@@ -791,6 +833,89 @@ export default function Home() {
       ),
     );
     setPublished(false);
+  }
+
+  async function generateCanvasImage(
+    blockId: string,
+    prompt: string,
+    alt?: string,
+  ) {
+    const block = live.current.canvasBlocks.find((item) => item.id === blockId);
+    const cleanPrompt = prompt.trim();
+    if (!block) return { ok: false, error: "Canvas block not found." };
+    if (!cleanPrompt)
+      return { ok: false, error: "Describe the illustration to generate." };
+
+    setImageGeneratingBlockId(blockId);
+    setActivity(`Agent is illustrating “${block.title}”`);
+    addAgentEvent("Image generation started", block.title);
+    try {
+      const response = await fetch("/api/images/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: cleanPrompt,
+          title: block.title,
+          body: block.body,
+          theme: live.current.canvasTheme,
+        }),
+      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(
+          String(errorBody.error ?? "The illustration could not be generated."),
+        );
+      }
+
+      const imageBlob = await response.blob();
+      const image: CanvasImage = {
+        id: `image-${crypto.randomUUID()}`,
+        url: URL.createObjectURL(imageBlob),
+        alt: alt?.trim() || `AI-generated illustration for ${block.title}`,
+        prompt: cleanPrompt,
+        model: response.headers.get("X-LiveSignal-Image-Model") ?? "OpenAI image model",
+        generatedAt: new Date().toISOString(),
+      };
+      const previousUrl = block.image?.url;
+      updateCanvasBlock(blockId, { image });
+      if (previousUrl?.startsWith("blob:")) URL.revokeObjectURL(previousUrl);
+      addAgentEvent("Illustration added", `${block.title} · AI-generated`);
+      setActivity("Agent added an AI-generated illustration");
+      return {
+        ok: true,
+        blockId,
+        image: {
+          id: image.id,
+          alt: image.alt,
+          prompt: image.prompt,
+          model: image.model,
+          generatedAt: image.generatedAt,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addAgentEvent("Image generation stopped", message);
+      setActivity(`Image generation unavailable · ${message}`);
+      return { ok: false, error: message };
+    } finally {
+      setImageGeneratingBlockId("");
+    }
+  }
+
+  function removeCanvasImage(blockId: string, humanInitiated = false) {
+    const block = live.current.canvasBlocks.find((item) => item.id === blockId);
+    if (!block?.image) return { ok: false, error: "This card has no image." };
+    if (block.image.url.startsWith("blob:")) URL.revokeObjectURL(block.image.url);
+    updateCanvasBlock(blockId, { image: undefined });
+    if (humanInitiated) {
+      recordHumanRevision(
+        "canvas image",
+        `Removed AI-generated illustration from ${block.title}`,
+      );
+    }
+    addAgentEvent("Illustration removed", block.title);
+    setActivity("AI-generated illustration removed");
+    return { ok: true, blockId };
   }
 
   function addCanvasBlock(input?: Partial<CanvasBlock>) {
@@ -812,6 +937,9 @@ export default function Home() {
   }
 
   function removeCanvasBlock(id: string) {
+    const block = live.current.canvasBlocks.find((item) => item.id === id);
+    if (block?.image?.url.startsWith("blob:"))
+      URL.revokeObjectURL(block.image.url);
     setCanvasBlocks((current) => current.filter((block) => block.id !== id));
     setSelectedCanvasId((current) => (current === id ? "" : current));
     setPublished(false);
@@ -895,6 +1023,7 @@ export default function Home() {
     setReportTitle("Untitled research report");
     setReportOverview("");
     setReportSections([]);
+    revokeCanvasImages();
     setCanvasBlocks([]);
     setSelectedCanvasId("");
     setCanvasTheme("notebook");
@@ -957,6 +1086,7 @@ export default function Home() {
       "A source-backed shortlist for a traveller who loves spicy noodles and everyday street food.",
     );
     setReportSections(example.sections);
+    revokeCanvasImages();
     seedCanvas(example.sections);
     setCanvasTheme("notebook");
     setHumanRevisions([]);
@@ -1328,6 +1458,7 @@ export default function Home() {
       setReportTitle(String(reportInput.title ?? "Agent research report"));
       setReportOverview(String(reportInput.overview ?? ""));
       setReportSections(sections);
+      revokeCanvasImages();
       seedCanvas(sections);
       setCanvasTheme("notebook");
       setHumanRevisions([]);
@@ -2335,6 +2466,32 @@ export default function Home() {
       },
     );
     tool(
+      "generate_canvas_image",
+      "Generates or replaces one AI illustration for a selected canvas card after the human asks for a visual. The result is visibly labeled as generated artwork and never treated as source evidence.",
+      async (input) =>
+        generateCanvasImage(
+          String(input.blockId ?? ""),
+          String(input.prompt ?? ""),
+          input.alt === undefined ? undefined : String(input.alt),
+        ),
+      {
+        type: "object",
+        properties: {
+          blockId: { type: "string" },
+          prompt: {
+            type: "string",
+            description:
+              "Art direction based on the human's comment, card meaning, and canvas mood. Do not ask for text inside the image.",
+          },
+          alt: {
+            type: "string",
+            description: "Concise accessible description of the intended image.",
+          },
+        },
+        required: ["blockId", "prompt"],
+      },
+    );
+    tool(
       "remove_canvas_block",
       "Removes one canvas block when the human asks for a simpler composition.",
       (input) => {
@@ -3209,6 +3366,23 @@ export default function Home() {
                                 </button>
                               </div>
                             </div>
+                            {imageGeneratingBlockId === block.id && (
+                              <div className="canvas-card-image generating" aria-live="polite">
+                                <i />
+                                <span>Agent is making the illustration</span>
+                              </div>
+                            )}
+                            {block.image && imageGeneratingBlockId !== block.id && (
+                              <figure className="canvas-card-image">
+                                {/* Blob URLs are generated in-session and cannot use Next image optimization. */}
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={block.image.url} alt={block.image.alt} />
+                                <figcaption>
+                                  <span>AI-GENERATED ILLUSTRATION</span>
+                                  <i aria-hidden="true">✦</i>
+                                </figcaption>
+                              </figure>
+                            )}
                             <h3>{block.title}</h3>
                             <p>{block.body}</p>
                             <div className="canvas-block-proof">
@@ -3500,6 +3674,66 @@ export default function Home() {
                         }}
                       />
                     </label>
+                    <div
+                      className={`canvas-visual-control ${
+                        selectedCanvasBlock.image ? "has-image" : ""
+                      }`}
+                    >
+                      <div>
+                        <span>CARD VISUAL</span>
+                        <b>
+                          {imageGeneratingBlockId === selectedCanvasBlock.id
+                            ? "Agent is illustrating…"
+                            : selectedCanvasBlock.image
+                              ? "AI illustration attached"
+                              : "Turn this idea into an image"}
+                        </b>
+                      </div>
+                      {selectedCanvasBlock.image ? (
+                        <>
+                          <p>{selectedCanvasBlock.image.prompt}</p>
+                          <div className="canvas-visual-actions">
+                            <button
+                              type="button"
+                              disabled={
+                                imageGeneratingBlockId === selectedCanvasBlock.id
+                              }
+                              onClick={() =>
+                                requestCanvasVisual(selectedCanvasBlock, true)
+                              }
+                            >
+                              Ask for another
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                imageGeneratingBlockId === selectedCanvasBlock.id
+                              }
+                              onClick={() =>
+                                removeCanvasImage(selectedCanvasBlock.id, true)
+                              }
+                            >
+                              Remove image
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="request-card-visual"
+                          disabled={
+                            imageGeneratingBlockId === selectedCanvasBlock.id
+                          }
+                          onClick={() => requestCanvasVisual(selectedCanvasBlock)}
+                        >
+                          <span>Ask agent to create</span>
+                          <i aria-hidden="true">✦</i>
+                        </button>
+                      )}
+                      <small>
+                        Generated artwork is labeled and never used as source proof.
+                      </small>
+                    </div>
                     <div className="canvas-inline-controls">
                       <span>SIZE</span>
                       {(["half", "wide"] as CanvasBlockSpan[]).map((span) => (
