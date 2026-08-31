@@ -526,6 +526,29 @@ export default function Home() {
     connectedAgent,
   ]);
 
+  function replaceSourceEvidence(
+    source: ResearchSource,
+    segments: EvidenceItem[],
+  ) {
+    const nextSources = [
+      ...live.current.sources.filter((item) => item.id !== source.id),
+      source,
+    ];
+    const nextEvidence = [
+      ...live.current.evidence.filter((item) => item.sourceId !== source.id),
+      ...segments,
+    ];
+    // WebMCP clients may call the next tool before React commits a render.
+    // Keep the semantic tool snapshot synchronous with the tool result.
+    live.current = {
+      ...live.current,
+      sources: nextSources,
+      evidence: nextEvidence,
+    };
+    setSources(nextSources);
+    setEvidence(nextEvidence);
+  }
+
   function addAgentEvent(label: string, detail: string) {
     setAgentEvents((current) => [
       ...current.slice(-5),
@@ -943,6 +966,7 @@ export default function Home() {
 
   function seedCanvas(sections: ReportSection[]) {
     const blocks = canvasFromReport(sections);
+    live.current = { ...live.current, canvasBlocks: blocks };
     setCanvasBlocks(blocks);
     setSelectedCanvasId(blocks[0]?.id ?? "");
     setCanvasView("canvas");
@@ -1156,13 +1180,35 @@ export default function Home() {
     setPublished(false);
     setIngestError("");
     setRunPhase("discovering");
-    setAgentEvents([
+    const nextAgentEvents = [
       {
         id: crypto.randomUUID(),
         label: "Request accepted",
         detail: cleanGoal,
       },
-    ]);
+    ];
+    live.current = {
+      ...live.current,
+      goal: cleanGoal,
+      brief: EMPTY_BRIEF,
+      sources: [],
+      evidence: [],
+      pinnedIds: [],
+      reportTitle: "Untitled research report",
+      reportOverview: "",
+      reportSections: [],
+      published: false,
+      runPhase: "discovering",
+      agentEvents: nextAgentEvents,
+      humanRevisions: [],
+      agentComments: [],
+      canvasBlocks: [],
+      canvasTheme: "notebook",
+      collaborationSession: null,
+      collaborationPresence: "inactive",
+      canvasChangeBatches: [],
+    };
+    setAgentEvents(nextAgentEvents);
     setActivity("ChatGPT is discovering relevant videos");
     window.location.hash = "workspace";
   }
@@ -1279,14 +1325,7 @@ export default function Home() {
         : "Open with the browser adapter to collect evidence",
       transcriptCount: segments.length,
     };
-    setSources((current) => [
-      ...current.filter((item) => item.id !== source.id),
-      source,
-    ]);
-    setEvidence((current) => [
-      ...current.filter((item) => item.sourceId !== source.id),
-      ...segments,
-    ]);
+    replaceSourceEvidence(source, segments);
     if (segments[0]) setFocusEvidenceId(segments[0].id);
     setEvidenceQuery("");
     setIngestStatus(result.transcript.available ? "ready" : "error");
@@ -1384,14 +1423,7 @@ export default function Home() {
       relevance: "Native captions or realtime STT from the active tab",
       transcriptCount: segments.length,
     };
-    setSources((current) => [
-      ...current.filter((item) => item.id !== source.id),
-      source,
-    ]);
-    setEvidence((current) => [
-      ...current.filter((item) => item.sourceId !== source.id),
-      ...segments,
-    ]);
+    replaceSourceEvidence(source, segments);
     if (segments[0]) setFocusEvidenceId(segments[0].id);
     setIngestStatus("ready");
     addAgentEvent(
@@ -1470,14 +1502,7 @@ export default function Home() {
       ),
       transcriptCount: segments.length,
     };
-    setSources((current) => [
-      ...current.filter((item) => item.id !== source.id),
-      source,
-    ]);
-    setEvidence((current) => [
-      ...current.filter((item) => item.sourceId !== source.id),
-      ...segments,
-    ]);
+    replaceSourceEvidence(source, segments);
     if (segments[0]) setFocusEvidenceId(segments[0].id);
     setRunPhase("extracting");
     addAgentEvent(
@@ -2168,6 +2193,7 @@ export default function Home() {
             input.outputFormat ?? "A concise, shareable visual guide",
           ),
         };
+        live.current = { ...live.current, brief: nextBrief };
         setBrief(nextBrief);
         return {
           ok: true,
@@ -2204,6 +2230,7 @@ export default function Home() {
             input.outputFormat ?? live.current.brief.outputFormat,
           ),
         };
+        live.current = { ...live.current, brief: next };
         setBrief(next);
         setActivity("Agent updated the research brief");
         return { ok: true, brief: next };
@@ -2433,6 +2460,14 @@ export default function Home() {
             return false;
           }),
         }));
+        live.current = {
+          ...live.current,
+          reportTitle: nextTitle,
+          reportOverview: nextOverview,
+          reportSections: nextSections,
+          published: false,
+          runPhase: "review",
+        };
         setReportTitle(nextTitle);
         setReportOverview(nextOverview);
         setReportSections(nextSections);
