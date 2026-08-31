@@ -14,7 +14,7 @@ LiveSignal is a WebMCP-powered research and creation desk. An agent can create a
 
 ## How we built it
 
-The web app registers 36 semantic WebMCP tools for the entire workflow: research setup, source and evidence ingestion, report writing, canvas creation, renewable collaboration waits, scoped block updates, human comments, card illustration, ordering, theme changes, revision acknowledgement, source navigation, and export. The React canvas stores source IDs and evidence IDs with each research block. AI-generated image bytes are returned through a same-origin server route and kept out of WebMCP payloads. A Manifest V3 adapter supplies a compatibility path for evidence gathered on existing YouTube and Twitch pages, including optional user-approved realtime transcription.
+The web app registers 36 semantic WebMCP tools for the entire workflow: research setup, source and evidence ingestion, report writing, canvas creation, renewable collaboration waits, scoped block updates, human comments, card illustration, ordering, theme changes, revision acknowledgement, source navigation, and export. The React canvas stores source IDs and evidence IDs with each research block. AI-generated image bytes come through a rate-limited same-origin route backed by Vercel AI Gateway deployment identity, and stay out of WebMCP payloads. A direct OpenAI image route remains available as a non-Vercel fallback. A Manifest V3 adapter supplies a compatibility path for evidence gathered on existing YouTube and Twitch pages, including optional user-approved realtime transcription.
 
 ## Challenges we ran into
 

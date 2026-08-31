@@ -83,7 +83,7 @@ npm install
 npm run dev
 ```
 
-Set `OPENAI_API_KEY` to enable human-directed canvas illustration. The optional `OPENAI_IMAGE_MODEL` defaults to `gpt-image-1-mini`. Image bytes stay in the current browser project and generated artwork is never treated as research evidence.
+Human-directed canvas illustration uses Vercel AI Gateway with deployment OIDC by default, so the hosted app needs no manually copied provider key. For local or non-Vercel hosting, set `AI_GATEWAY_API_KEY`; the optional `AI_GATEWAY_IMAGE_MODEL` defaults to `prodia/flux-fast-schnell`. `OPENAI_API_KEY` and `OPENAI_IMAGE_MODEL` remain a direct-provider fallback. Image bytes stay in the current browser project and generated artwork is never treated as research evidence.
 
 Validate the production build with:
 

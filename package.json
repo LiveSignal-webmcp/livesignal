@@ -14,6 +14,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "ai": "^6.0.272",
     "drizzle-orm": "0.45.2",
     "html-to-image": "^1.11.13",
     "next": "^16.2.6",

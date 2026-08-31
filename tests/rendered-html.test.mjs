@@ -84,6 +84,10 @@ test("keeps generated image bytes server-side and labels them as illustration", 
     "utf8",
   );
   assert.match(route, /OPENAI_API_KEY/);
+  assert.match(route, /VERCEL_OIDC_TOKEN/);
+  assert.match(route, /AI_GATEWAY_API_KEY/);
+  assert.match(route, /prodia\/flux-fast-schnell/);
+  assert.match(route, /feature:canvas-illustration/);
   assert.match(route, /gpt-image-1-mini/);
   assert.match(route, /output_format:\s*"webp"/);
   assert.match(route, /This is an AI-generated illustration, not documentary evidence/);

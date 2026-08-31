@@ -1,3 +1,5 @@
+import { generateImage } from "ai";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -40,7 +42,10 @@ export async function POST(request: Request) {
   if (!sameOrigin(request))
     return Response.json({ error: "Origin is not allowed." }, { status: 403 });
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey)
+  const hasGatewayAuth = Boolean(
+    process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
+  );
+  if (!apiKey && !hasGatewayAuth)
     return Response.json(
       { error: "Image generation is not configured." },
       { status: 503 },
@@ -70,7 +75,6 @@ export async function POST(request: Request) {
       { status: 400 },
     );
 
-  const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1-mini";
   const composedPrompt = [
     "Create one polished editorial illustration for a shareable research card.",
     `Visual direction from the human: ${prompt}`,
@@ -83,6 +87,57 @@ export async function POST(request: Request) {
   ]
     .filter(Boolean)
     .join("\n");
+
+  if (hasGatewayAuth) {
+    const gatewayModel =
+      process.env.AI_GATEWAY_IMAGE_MODEL || "prodia/flux-fast-schnell";
+    try {
+      const { image } = await generateImage({
+        model: gatewayModel,
+        prompt: composedPrompt,
+        aspectRatio: "1:1",
+        maxRetries: 1,
+        abortSignal: AbortSignal.timeout(50_000),
+        providerOptions: {
+          gateway: {
+            tags: ["feature:canvas-illustration", "app:livesignal"],
+          },
+        },
+      });
+      return new Response(Buffer.from(image.uint8Array), {
+        status: 200,
+        headers: {
+          "Content-Type": image.mediaType || "image/png",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "X-LiveSignal-Image-Model": gatewayModel,
+        },
+      });
+    } catch (error) {
+      if (!apiKey) {
+        const statusCode = Number(
+          (error as { statusCode?: unknown })?.statusCode ?? 502,
+        );
+        const status = [400, 401, 402, 403, 408, 429].includes(statusCode)
+          ? statusCode
+          : 502;
+        const message =
+          status === 402
+            ? "Image generation credits are unavailable."
+            : status === 429
+              ? "The image service is busy. Try again shortly."
+              : "The image service could not complete this illustration.";
+        console.error("LiveSignal AI Gateway image error", error);
+        return Response.json({ error: message }, { status });
+      }
+      console.error(
+        "LiveSignal AI Gateway image error; trying OpenAI fallback",
+        error,
+      );
+    }
+  }
+
+  const model = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1-mini";
 
   const imageResponse = await fetch(
     "https://api.openai.com/v1/images/generations",
