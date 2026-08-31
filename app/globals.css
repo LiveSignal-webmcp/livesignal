@@ -1418,11 +1418,26 @@ a {
   background: #e2eadf;
   box-shadow: inset 3px 0 0 var(--green);
 }
+.transcript-engine > div:last-child button.unverified {
+  background: rgba(246, 216, 144, 0.22);
+  box-shadow: inset 3px 0 0 #b27a14;
+}
+.transcript-engine > div:last-child button.captured {
+  background: rgba(172, 216, 211, 0.2);
+  box-shadow: inset 3px 0 0 #367a73;
+}
 .transcript-engine button b {
   font:
     500 8px "DM Mono",
     monospace;
   color: var(--red);
+}
+.transcript-engine button span small {
+  display: block;
+  margin-top: 3px;
+  color: #777871;
+  font: 600 7px "DM Mono", monospace;
+  letter-spacing: 0.45px;
 }
 .evidence-head {
   display: flex;
@@ -1894,6 +1909,16 @@ a {
   padding: 4px 6px;
   border: 1px solid rgba(48, 43, 37, 0.25);
   background: rgba(255,255,255,0.45);
+}
+.canvas-block-proof span.unverified {
+  color: #7a5410;
+  border-color: rgba(178, 122, 20, 0.55);
+  background: rgba(246, 216, 144, 0.35);
+}
+.canvas-block-proof span.captured {
+  color: #245e58;
+  border-color: rgba(54, 122, 115, 0.5);
+  background: rgba(172, 216, 211, 0.3);
 }
 .canvas-block-proof .personal-note {
   color: #8d4538;
@@ -2524,6 +2549,20 @@ a {
 }
 .report-citations button:hover {
   border-color: #d6df9c;
+}
+.report-citations button.unverified {
+  border-style: dashed;
+  border-color: #b27a14;
+}
+.report-citations button.unverified b {
+  color: #e8b95c;
+}
+.report-citations button.captured {
+  border-style: dashed;
+  border-color: #4e8f88;
+}
+.report-citations button.captured b {
+  color: #8ec9c2;
 }
 .report-citations button b {
   color: #d6df9c;

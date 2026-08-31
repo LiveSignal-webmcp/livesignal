@@ -9,7 +9,7 @@ Use LiveSignal as a shared video research and creation desk operated primarily t
 
 ## Universal research workflow
 
-1. Accept one goal; do not require the human to complete a research form. If the human wants to type on the blank LiveSignal page, call `wait_for_research_request` (up to 30 seconds) and use the returned request. Otherwise use their ChatGPT message directly. Then call `begin_research` with the request and an inferred brief. This clears any prior example or report.
+1. On opening or reconnecting to LiveSignal, call `identify_agent` with `client: "ChatGPT"`, an optional client-local `agentId`, and the capabilities you can perform. This is an optional presence handshake that lets the human see which agent is working; it does not create a persistent connection. Then accept one goal; do not require the human to complete a research form. If the human wants to type on the blank LiveSignal page, call `wait_for_research_request` (up to 30 seconds) and use the returned request. Otherwise use their ChatGPT message directly. Then call `begin_research` with the request and an inferred brief. This clears any prior example or report.
 2. Discover relevant YouTube videos with browser search. Prefer a small, diverse, credible source set rather than claiming to analyze all of YouTube.
 3. Call `ingest_youtube_video` for each selected URL. When server captions are available, use `search_video_evidence` immediately.
 4. If ChatGPT reads captions or source moments in another browser tab, call `record_video_evidence` on LiveSignal with the source metadata and timestamped excerpts. This is the primary cross-tab path in ChatGPT's built-in browser.

@@ -57,6 +57,7 @@ test("exposes renewable WebMCP collaboration and browser-agent tools", async () 
     "utf8",
   );
   assert.match(page, /"wait_for_research_request"/);
+  assert.match(page, /"identify_agent"/);
   assert.match(page, /"wait_for_agent_comment"/);
   assert.match(page, /"start_canvas_collaboration"/);
   assert.match(page, /"wait_for_collaboration_event"/);
@@ -75,7 +76,7 @@ test("exposes renewable WebMCP collaboration and browser-agent tools", async () 
   const toolNames = [
     ...page.matchAll(/\btool\(\s*\n?\s*"([^"]+)"/g),
   ].map((match) => match[1]);
-  assert.equal(new Set(toolNames).size, 36);
+  assert.equal(new Set(toolNames).size, 37);
 });
 
 test("keeps generated image bytes server-side and labels them as illustration", async () => {

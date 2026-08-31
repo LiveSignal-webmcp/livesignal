@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import {
+  acknowledgeSavedRevisions,
+  findTranscriptMatch,
+  normalizeEvidenceTiming,
+} from "@/lib/evidence";
+import {
   DISHES,
   EVIDENCE,
   SOURCES,
@@ -23,10 +28,13 @@ type ResearchSource = Source & {
   transcriptCount: number;
 };
 
+type EvidenceOrigin = "transcript" | "agent" | "extension";
+
 type EvidenceItem = TranscriptSegment & {
   sourceId: string;
   note?: string;
   confidence?: number;
+  origin: EvidenceOrigin;
 };
 
 type ResearchBrief = {
@@ -112,6 +120,15 @@ type CollaborationSession = {
   finishReason?: string;
 };
 
+type ConnectedAgent = {
+  client: string;
+  agentId?: string;
+  capabilities: string[];
+  identified: boolean;
+  connectedAt: string;
+  lastSeenAt: string;
+};
+
 type CanvasChangeBatch = {
   id: string;
   sessionId: string;
@@ -175,7 +192,7 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 36;
+const TOOL_COUNT = 37;
 const ENTRY_SUGGESTIONS = [
   {
     label: "Plan a food trip",
@@ -248,6 +265,40 @@ function timestampUrl(source: ResearchSource, seconds = 0) {
   }
 }
 
+function evidencePresentation(item: EvidenceItem) {
+  if (item.origin === "transcript" && item.timestamp) {
+    return {
+      className: "",
+      label: "",
+      title: "Timestamped transcript moment from the source video.",
+      verified: true,
+    };
+  }
+  if (item.origin === "extension") {
+    return {
+      className: "captured",
+      label: "BROWSER CAPTURE",
+      title: item.timestamp
+        ? "Timestamped evidence captured from the active video page by the browser extension."
+        : "Browser-captured evidence without a timestamp.",
+      verified: false,
+    };
+  }
+  return {
+    className: "unverified",
+    label:
+      item.origin === "transcript" ? "TRANSCRIPT · NO TIMESTAMP" : "AGENT CLAIM",
+    title: item.timestamp
+      ? "Agent-claimed moment, not matched to an imported transcript."
+      : "Agent claim with no timestamp supplied.",
+    verified: false,
+  };
+}
+
+function timedEvidenceCount(items: EvidenceItem[]) {
+  return items.filter((item) => Boolean(item.timestamp)).length;
+}
+
 function exampleWorkspace() {
   const sources: ResearchSource[] = SOURCES.map((source) => ({
     ...source,
@@ -265,6 +316,7 @@ function exampleWorkspace() {
     durationSeconds: 0,
     timestamp: item.time,
     confidence: item.confidence,
+    origin: "transcript",
   }));
   const sections: ReportSection[] = DISHES.map((dish) => ({
     id: dish.id,
@@ -315,6 +367,8 @@ export default function Home() {
     useState<CollaborationPresence>("inactive");
   const [collaborationSession, setCollaborationSession] =
     useState<CollaborationSession | null>(null);
+  const [connectedAgent, setConnectedAgent] =
+    useState<ConnectedAgent | null>(null);
   const [canvasChangeBatches, setCanvasChangeBatches] = useState<
     CanvasChangeBatch[]
   >([]);
@@ -376,6 +430,7 @@ export default function Home() {
   const collaborationActive = collaborationSession?.status === "active";
   const agentActivelyListening =
     agentListening || collaborationPresence === "listening";
+  const connectedAgentLabel = connectedAgent?.client ?? "";
   const openAgentComments = useMemo(
     () => agentComments.filter((comment) => comment.status !== "answered"),
     [agentComments],
@@ -424,6 +479,7 @@ export default function Home() {
     collaborationSession,
     collaborationPresence,
     canvasChangeBatches,
+    connectedAgent,
   });
 
   useEffect(() => {
@@ -446,6 +502,7 @@ export default function Home() {
       collaborationSession,
       collaborationPresence,
       canvasChangeBatches,
+      connectedAgent,
     };
   }, [
     goal,
@@ -466,6 +523,7 @@ export default function Home() {
     collaborationSession,
     collaborationPresence,
     canvasChangeBatches,
+    connectedAgent,
   ]);
 
   function addAgentEvent(label: string, detail: string) {
@@ -505,6 +563,63 @@ export default function Home() {
     });
     setPublished(false);
     setActivity(`Human changed ${field} · save when ready`);
+  }
+
+  function identifyAgent(input: Record<string, unknown>) {
+    const suppliedClient = String(input.client ?? input.name ?? "").trim();
+    const client = suppliedClient.slice(0, 80) || "Unknown WebMCP client";
+    const suppliedAgentId = String(input.agentId ?? "").trim();
+    const agentId = suppliedAgentId.slice(0, 120) || undefined;
+    const capabilities = Array.isArray(input.capabilities)
+      ? [...new Set(input.capabilities.map(String).map((item) => item.trim()).filter(Boolean))]
+          .slice(0, 16)
+          .map((item) => item.slice(0, 60))
+      : [];
+    const now = new Date().toISOString();
+    const previous = live.current.connectedAgent;
+    const sameAgent = Boolean(
+      previous &&
+        previous.client === client &&
+        previous.agentId === agentId,
+    );
+    const agent: ConnectedAgent = {
+      client,
+      ...(agentId ? { agentId } : {}),
+      capabilities,
+      identified: true,
+      connectedAt: sameAgent && previous ? previous.connectedAt : now,
+      lastSeenAt: now,
+    };
+    setConnectedAgent(agent);
+    addAgentEvent(
+      sameAgent ? "Agent presence refreshed" : "Agent identified",
+      client,
+    );
+    setActivity(`Agent identified · ${client}`);
+    return {
+      ok: true,
+      agent,
+      note: "Client identity is supplied by the agent and is visible only in this page session.",
+    };
+  }
+
+  function noteAgentActivity() {
+    const now = new Date().toISOString();
+    const current = live.current.connectedAgent;
+    if (!current) {
+      const anonymousAgent: ConnectedAgent = {
+        client: "WebMCP client",
+        capabilities: [],
+        identified: false,
+        connectedAt: now,
+        lastSeenAt: now,
+      };
+      setConnectedAgent(anonymousAgent);
+      addAgentEvent("WebMCP agent detected", "A client invoked a page tool");
+      setActivity("WebMCP agent detected · identify to show its name");
+      return;
+    }
+    setConnectedAgent({ ...current, lastSeenAt: now });
   }
 
   function startCanvasCollaboration() {
@@ -775,8 +890,16 @@ export default function Home() {
             (entry) => entry.id === item.sourceId,
           );
           if (!source) return;
+          const presentation = evidencePresentation(item);
+          const label = item.timestamp
+            ? `${item.timestamp} · ${source.creator} — ${source.title}${
+                presentation.label
+                  ? ` (${presentation.label.toLowerCase()})`
+                  : ""
+              }`
+            : `${presentation.label.toLowerCase()} without timestamp · ${source.creator} — ${source.title}`;
           lines.push(
-            `- [${item.timestamp} · ${source.creator} — ${source.title}](${timestampUrl(source, item.seconds)})`,
+            `- [${label}](${timestampUrl(source, item.seconds)})`,
             `  > ${item.text}`,
           );
         });
@@ -786,7 +909,7 @@ export default function Home() {
     lines.push(
       "---",
       "",
-      `Created with LiveSignal from ${state.sources.length} video sources and ${state.evidence.length} timestamped evidence moments.`,
+      `Created with LiveSignal from ${state.sources.length} video sources and ${timedEvidenceCount(state.evidence)} timestamped evidence moments.`,
     );
     return lines.join("\n");
   }
@@ -1136,9 +1259,13 @@ export default function Home() {
       setIngestError(message);
       throw new Error(message);
     }
-    const segments = (result.transcript.segments as TranscriptSegment[]).map(
-      (segment) => ({ ...segment, sourceId: String(result.source.id) }),
-    );
+    const segments = (
+      result.transcript.segments as TranscriptSegment[]
+    ).map((segment) => ({
+      ...segment,
+      sourceId: String(result.source.id),
+      origin: "transcript" as const,
+    }));
     const source: ResearchSource = {
       id: String(result.source.id),
       videoId: String(result.source.videoId),
@@ -1233,14 +1360,18 @@ export default function Home() {
       (snapshot.recentTranscript as
         Array<Record<string, unknown>> | undefined) ?? []
     )
-      .map((segment, index): EvidenceItem => ({
-        id: String(segment.id ?? `${videoId}-${index}`),
-        sourceId: videoId,
-        text: String(segment.text ?? ""),
-        seconds: Number(segment.seconds ?? 0),
-        durationSeconds: Number(segment.durationSeconds ?? 0),
-        timestamp: String(segment.timestamp ?? "0:00"),
-      }))
+      .map((segment, index): EvidenceItem => {
+        const timing = normalizeEvidenceTiming(segment);
+        return {
+          id: String(segment.id ?? `${videoId}-${index}`),
+          sourceId: videoId,
+          text: String(segment.text ?? ""),
+          seconds: timing.seconds,
+          durationSeconds: Number(segment.durationSeconds ?? 0),
+          timestamp: timing.timestamp,
+          origin: "extension",
+        };
+      })
       .filter((segment) => segment.text);
     const source: ResearchSource = {
       id: videoId,
@@ -1297,21 +1428,34 @@ export default function Home() {
       }
     }
     const sourceId = String(sourceInput.id ?? videoId);
+    const transcriptPool = live.current.evidence.filter(
+      (entry) => entry.sourceId === sourceId && entry.origin === "transcript",
+    );
     const segments = (
       Array.isArray(input.evidence)
         ? (input.evidence as Array<Record<string, unknown>>)
         : []
     )
-      .map((item, index): EvidenceItem => ({
-        id: String(item.id ?? `${sourceId}-agent-${index}`),
-        sourceId,
-        text: String(item.text ?? "").trim(),
-        seconds: Number(item.seconds ?? 0),
-        durationSeconds: Number(item.durationSeconds ?? 0),
-        timestamp: String(item.timestamp ?? "0:00"),
-        note: item.note === undefined ? undefined : String(item.note),
-      }))
+      .map((item, index): EvidenceItem => {
+        const timing = normalizeEvidenceTiming(item);
+        const text = String(item.text ?? "");
+        const match = findTranscriptMatch(text, timing, transcriptPool);
+        return {
+          id: String(item.id ?? `${sourceId}-agent-${index}`),
+          sourceId,
+          text: text.trim(),
+          seconds: match ? match.seconds : timing.seconds,
+          durationSeconds: Number(item.durationSeconds ?? 0),
+          timestamp: match ? match.timestamp : timing.timestamp,
+          note: item.note === undefined ? undefined : String(item.note),
+          origin: match ? "transcript" : "agent",
+        };
+      })
       .filter((item) => item.text);
+    const verifiedCount = segments.filter(
+      (item) => item.origin === "transcript",
+    ).length;
+    const claimCount = segments.length - verifiedCount;
     const source: ResearchSource = {
       id: sourceId,
       videoId,
@@ -1322,7 +1466,7 @@ export default function Home() {
       duration: "BROWSER",
       relevance: String(
         sourceInput.relevance ??
-          "Selected and verified by ChatGPT in the browser",
+          "Selected by the agent in the browser",
       ),
       transcriptCount: segments.length,
     };
@@ -1338,10 +1482,21 @@ export default function Home() {
     setRunPhase("extracting");
     addAgentEvent(
       "Agent evidence recorded",
-      `${title} · ${segments.length} timestamped moments`,
+      `${title} · ${segments.length} moments · ${verifiedCount} verified, ${claimCount} agent claims`,
     );
-    setActivity(`ChatGPT added ${segments.length} evidence moments`);
-    return { ok: true, source, evidence: segments };
+    setActivity(
+      `ChatGPT added ${segments.length} moments · ${verifiedCount} transcript-verified`,
+    );
+    return {
+      ok: true,
+      source,
+      evidence: segments,
+      verifiedAgainstTranscript: verifiedCount,
+      agentClaims: claimCount,
+      note: claimCount
+        ? "Unverified claims are stored as agent claims, not transcript moments. Ingest the video first or cite exact transcript wording to verify them."
+        : "All recorded moments matched the imported transcript.",
+    };
   }
 
   function applyAgentProject() {
@@ -1375,19 +1530,25 @@ export default function Home() {
             ? (sourceInput.evidence as Array<Record<string, unknown>>)
             : []
         )
-          .map((item, evidenceIndex): EvidenceItem => ({
-            id: String(item.id ?? `${sourceId}-evidence-${evidenceIndex + 1}`),
-            sourceId,
-            text: String(item.text ?? "").trim(),
-            seconds: Number(item.seconds ?? 0),
-            durationSeconds: Number(item.durationSeconds ?? 0),
-            timestamp: String(item.timestamp ?? "0:00"),
-            note: item.note === undefined ? undefined : String(item.note),
-            confidence:
-              item.confidence === undefined
-                ? undefined
-                : Number(item.confidence),
-          }))
+          .map((item, evidenceIndex): EvidenceItem => {
+            const timing = normalizeEvidenceTiming(item);
+            return {
+              id: String(
+                item.id ?? `${sourceId}-evidence-${evidenceIndex + 1}`,
+              ),
+              sourceId,
+              text: String(item.text ?? "").trim(),
+              seconds: timing.seconds,
+              durationSeconds: Number(item.durationSeconds ?? 0),
+              timestamp: timing.timestamp,
+              note: item.note === undefined ? undefined : String(item.note),
+              confidence:
+                item.confidence === undefined
+                  ? undefined
+                  : Number(item.confidence),
+              origin: "agent",
+            };
+          })
           .filter((item) => item.text);
         nextSources.push({
           id: sourceId,
@@ -1399,7 +1560,7 @@ export default function Home() {
           duration: "BROWSER",
           relevance: String(
             sourceInput.relevance ??
-              "Selected and verified by ChatGPT in the browser",
+              "Selected by the agent in the browser",
           ),
           transcriptCount: sourceEvidence.length,
         });
@@ -1408,7 +1569,7 @@ export default function Home() {
       if (nextSources.length === 0)
         throw new Error("The agent result needs at least one source.");
       if (nextEvidence.length === 0)
-        throw new Error("The agent result needs timestamped evidence.");
+        throw new Error("The agent result needs at least one evidence item.");
 
       const briefInput = payload.brief ?? {};
       const reportInput = payload.report ?? {};
@@ -1542,18 +1703,45 @@ export default function Home() {
       execute: (input: Record<string, unknown>) => unknown,
       inputSchema?: object,
     ) => {
-      toolHandlers.set(name, execute);
+      const executeWithPresence = (input: Record<string, unknown>) => {
+        if (name !== "identify_agent") noteAgentActivity();
+        return execute(input);
+      };
+      toolHandlers.set(name, executeWithPresence);
       if (!shouldRegisterWebMcp) return;
       jobs.push(
         page.modelContext!.registerTool({
           name,
           description,
-          execute,
+          execute: executeWithPresence,
           inputSchema,
         }),
       );
     };
 
+    tool(
+      "identify_agent",
+      "Optional connection handshake. Identify the client and its capabilities so the shared workspace can show which agent is present. Call once when opening LiveSignal and again when reconnecting.",
+      (input) => identifyAgent(input),
+      {
+        type: "object",
+        properties: {
+          client: {
+            type: "string",
+            description: "Human-readable client name, for example ChatGPT or Claude Code.",
+          },
+          agentId: {
+            type: "string",
+            description: "Optional client-local agent or session identifier.",
+          },
+          capabilities: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional capabilities this agent can perform in this workspace.",
+          },
+        },
+      },
+    );
     tool(
       "get_workspace_state",
       "Returns the current visible research brief, sources, timestamped evidence, evidence draft, visual canvas, and publication status.",
@@ -1744,13 +1932,12 @@ export default function Home() {
           ? input.revisionIds.map(String)
           : [];
         const acknowledgeAll = Boolean(input.all) || requestedIds.length === 0;
-        setHumanRevisions((current) =>
-          current.map((revision) =>
-            acknowledgeAll || requestedIds.includes(revision.id)
-              ? { ...revision, acknowledged: true }
-              : revision,
-          ),
+        const acknowledgement = acknowledgeSavedRevisions(
+          live.current.humanRevisions,
+          requestedIds,
+          acknowledgeAll,
         );
+        setHumanRevisions(acknowledgement.revisions);
         addAgentEvent(
           "Human edits acknowledged",
           acknowledgeAll
@@ -1760,7 +1947,16 @@ export default function Home() {
         if (live.current.collaborationSession?.status === "active")
           setCollaborationPresence("paused");
         setActivity("Agent caught up with human edits");
-        return { ok: true, acknowledged: acknowledgeAll ? "all" : requestedIds };
+        return {
+          ok: true,
+          acknowledged: acknowledgeAll
+            ? "all"
+            : acknowledgement.acknowledgedIds,
+          acknowledgedIds: acknowledgement.acknowledgedIds,
+          remainingUnacknowledged:
+            acknowledgement.remainingUnacknowledged,
+          unsavedCount: acknowledgement.unsavedCount,
+        };
       },
       {
         type: "object",
@@ -2043,7 +2239,7 @@ export default function Home() {
     );
     tool(
       "record_video_evidence",
-      "Writes a video and timestamped evidence researched in another browser tab back into LiveSignal. Use this when ChatGPT reads captions or source moments directly, especially when server transcript import is unavailable.",
+      "Writes a video and evidence researched in another browser tab back into LiveSignal. Use this when ChatGPT reads captions or source moments directly, especially when server transcript import is unavailable. Supply a timestamp or seconds whenever possible. Text is matched against imported transcript rows near that time; unmatched or untimed entries remain visibly labelled agent claims.",
       (input) => recordAgentEvidence(input),
       {
         type: "object",
@@ -2209,11 +2405,11 @@ export default function Home() {
     );
     tool(
       "write_report",
-      "Writes a complete editable report from researched evidence. Each section may cite evidence IDs.",
+      "Writes a complete editable report from researched evidence. Each section may cite evidence IDs recorded earlier in this workspace.",
       (input) => {
         const nextTitle = String(input.title ?? "Untitled research report");
         const nextOverview = String(input.overview ?? "");
-        const nextSections = Array.isArray(input.sections)
+        const requestedSections = Array.isArray(input.sections)
           ? (input.sections as Array<Record<string, unknown>>).map(
               (section, index): ReportSection => ({
                 id: String(section.id ?? `section-${Date.now()}-${index}`),
@@ -2225,6 +2421,18 @@ export default function Home() {
               }),
             )
           : live.current.reportSections;
+        const knownEvidence = new Set(
+          live.current.evidence.map((item) => item.id),
+        );
+        const droppedCitations: string[] = [];
+        const nextSections = requestedSections.map((section) => ({
+          ...section,
+          evidenceIds: section.evidenceIds.filter((id) => {
+            if (knownEvidence.has(id)) return true;
+            droppedCitations.push(id);
+            return false;
+          }),
+        }));
         setReportTitle(nextTitle);
         setReportOverview(nextOverview);
         setReportSections(nextSections);
@@ -2241,6 +2449,13 @@ export default function Home() {
           ok: true,
           title: nextTitle,
           sectionCount: nextSections.length,
+          droppedCitations,
+          ...(droppedCitations.length
+            ? {
+                warning:
+                  "Some cited evidence IDs do not exist in this workspace and were removed. Record the evidence first, then cite the returned IDs.",
+              }
+            : {}),
         };
       },
       {
@@ -2272,18 +2487,33 @@ export default function Home() {
         if (input.title !== undefined) setReportTitle(String(input.title));
         if (input.overview !== undefined)
           setReportOverview(String(input.overview));
+        let droppedCitations: string[] = [];
         if (Array.isArray(input.sections)) {
+          const knownEvidence = new Set(
+            live.current.evidence.map((item) => item.id),
+          );
+          droppedCitations = [];
           const next = (input.sections as Array<Record<string, unknown>>).map(
             (section, index): ReportSection => ({
               id: String(section.id ?? `revision-${Date.now()}-${index}`),
               heading: String(section.heading ?? `Finding ${index + 1}`),
               body: String(section.body ?? ""),
-              evidenceIds: Array.isArray(section.evidenceIds)
+              evidenceIds: (Array.isArray(section.evidenceIds)
                 ? section.evidenceIds.map(String)
-                : [],
+                : []
+              ).filter((id) => {
+                if (knownEvidence.has(id)) return true;
+                droppedCitations.push(id);
+                return false;
+              }),
             }),
           );
           setReportSections(next);
+          if (droppedCitations.length)
+            addAgentEvent(
+              "Unknown citations dropped",
+              `${droppedCitations.length} cited IDs are not in this workspace`,
+            );
         }
         setPublished(false);
         setRunPhase("review");
@@ -2295,7 +2525,7 @@ export default function Home() {
           `Agent revision applied · ${String(input.instruction ?? "report improved")}`,
         );
         window.location.hash = "report";
-        return { ok: true, instruction: input.instruction };
+        return { ok: true, instruction: input.instruction, droppedCitations };
       },
       {
         type: "object",
@@ -2683,12 +2913,27 @@ export default function Home() {
         ) : (
           <span className="consumer-nav-line">VIDEO KNOWLEDGE, MADE USEFUL</span>
         )}
-        <div className={`mcp-status ${mcp}`}>
+        <div
+          className={`mcp-status ${mcp}`}
+          title={
+            connectedAgent
+              ? connectedAgent.identified
+                ? `${connectedAgent.client} identified itself through the LiveSignal WebMCP handshake.`
+                : "A WebMCP client invoked a page tool, but the browser did not provide its identity or a durable connection state."
+              : "WebMCP tools are available, but no agent has identified itself."
+          }
+        >
           <i />
           {mcp === "registered"
-            ? workspaceActive
-              ? `${TOOL_COUNT} WebMCP tools ready`
-              : "Agent ready"
+            ? connectedAgent
+              ? agentActivelyListening
+                ? `${connectedAgentLabel} listening`
+                : connectedAgent.identified
+                  ? `Agent · ${connectedAgentLabel}`
+                  : "Agent seen · WebMCP client"
+              : workspaceActive
+                ? `${TOOL_COUNT} WebMCP tools ready`
+                : "WebMCP ready"
             : mcp === "unavailable"
               ? "Open with ChatGPT"
               : mcp === "error"
@@ -3072,8 +3317,19 @@ export default function Home() {
                 {sources.length} real source{sources.length === 1 ? "" : "s"}
               </b>
               {" · "}
-              {evidence.length} timestamped evidence segment
-              {evidence.length === 1 ? "" : "s"}
+              {timedEvidenceCount(evidence)} timestamped evidence segment
+              {timedEvidenceCount(evidence) === 1 ? "" : "s"}
+              {evidence.some((item) => item.origin === "agent") && (
+                <>
+                  {" · "}
+                  {evidence.filter((item) => item.origin === "agent").length}{" "}
+                  agent claim
+                  {evidence.filter((item) => item.origin === "agent").length ===
+                  1
+                    ? ""
+                    : "s"}
+                </>
+              )}
             </p>
 
             {sources.length === 0 ? (
@@ -3107,7 +3363,7 @@ export default function Home() {
                       <p>
                         {source.creator} · {source.relevance}
                       </p>
-                      <small>{source.transcriptCount} timed segments</small>
+                      <small>{source.transcriptCount} captured segments</small>
                     </div>
                     <button
                       className="include-button"
@@ -3142,17 +3398,28 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  {visibleEvidence.map((item) => (
-                    <button
-                      type="button"
-                      className={focusEvidence?.id === item.id ? "active" : ""}
-                      key={item.id}
-                      onClick={() => setFocusEvidenceId(item.id)}
-                    >
-                      <b>{item.timestamp}</b>
-                      <span>{item.text}</span>
-                    </button>
-                  ))}
+                  {visibleEvidence.map((item) => {
+                    const presentation = evidencePresentation(item);
+                    return (
+                      <button
+                        type="button"
+                        className={`${
+                          focusEvidence?.id === item.id ? "active" : ""
+                        } ${presentation.className}`.trim()}
+                        title={presentation.title}
+                        key={item.id}
+                        onClick={() => setFocusEvidenceId(item.id)}
+                      >
+                        <b>{item.timestamp || "NO TIME"}</b>
+                        <span>
+                          {item.text}
+                          <small>
+                            {presentation.label || "VERIFIED TRANSCRIPT"}
+                          </small>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -3190,12 +3457,17 @@ export default function Home() {
                         );
                     }}
                   >
-                    <b>{focusEvidence.timestamp}</b> Open source moment ↗
+                    <b>{focusEvidence.timestamp || "SOURCE"}</b>{" "}
+                    {focusEvidence.timestamp
+                      ? "Open source moment ↗"
+                      : "Open source video ↗"}
                   </button>
                   <span>
+                    {evidencePresentation(focusEvidence).label ||
+                      "VERIFIED TRANSCRIPT"}
                     {focusEvidence.confidence
-                      ? `${focusEvidence.confidence}% fixture confidence`
-                      : "Direct transcript evidence"}
+                      ? ` · ${focusEvidence.confidence}% fixture confidence`
+                      : ""}
                   </span>
                 </div>
               </div>
@@ -3301,7 +3573,7 @@ export default function Home() {
                         <p>{reportOverview}</p>
                         <div>
                           <b>{sources.length}</b> VIDEO SOURCES
-                          <b>{evidence.length}</b> TIMED MOMENTS
+                          <b>{timedEvidenceCount(evidence)}</b> TIMED MOMENTS
                         </div>
                       </div>
                       {sources[0] && (
@@ -3390,9 +3662,18 @@ export default function Home() {
                                 const source = sources.find(
                                   (entry) => entry.id === item.sourceId,
                                 );
+                                const presentation = evidencePresentation(item);
                                 return (
-                                  <span key={item.id}>
-                                    {item.timestamp} · {source?.creator ?? "Source"}
+                                  <span
+                                    key={item.id}
+                                    className={presentation.className}
+                                    title={presentation.title}
+                                  >
+                                    {item.timestamp || "NO TIMESTAMP"} ·{" "}
+                                    {source?.creator ?? "Source"}
+                                    {presentation.label
+                                      ? ` · ${presentation.label}`
+                                      : ""}
                                   </span>
                                 );
                               })}
@@ -3426,7 +3707,9 @@ export default function Home() {
                   }`}
                 >
                   <div className="collab-session-line">
-                    <span>HUMAN ↔ AGENT LOOP</span>
+                    <span>
+                      HUMAN ↔ {connectedAgentLabel || "AGENT"} LOOP
+                    </span>
                     <i className={`collab-presence ${collaborationPresence}`}>
                       {collaborationPresence === "listening"
                         ? "● AGENT LISTENING"
@@ -3510,12 +3793,16 @@ export default function Home() {
                     </div>
                     <i className={`agent-presence ${mcp} ${agentActivelyListening ? "listening" : ""}`}>
                       {agentActivelyListening
-                        ? "● AGENT LISTENING"
+                        ? `● ${connectedAgentLabel || "AGENT"} LISTENING`
                         : collaborationPresence === "responding"
-                          ? "● AGENT RESPONDING"
-                        : mcp === "registered"
-                          ? "WEBMCP LIVE"
-                          : "AGENT INBOX"}
+                          ? `● ${connectedAgentLabel || "AGENT"} RESPONDING`
+                          : connectedAgent
+                            ? connectedAgent.identified
+                              ? `AGENT · ${connectedAgentLabel}`
+                              : "AGENT SEEN · WEBMCP CLIENT"
+                            : mcp === "registered"
+                              ? "WEBMCP READY"
+                              : "AGENT INBOX"}
                     </i>
                   </div>
                   <div className="agent-comment-scope" aria-label="Comment scope">
@@ -3934,10 +4221,13 @@ export default function Home() {
                           const source = sources.find(
                             (entry) => entry.id === item.sourceId,
                           );
+                          const presentation = evidencePresentation(item);
                           return (
                             <button
                               type="button"
                               key={item.id}
+                              className={presentation.className}
+                              title={presentation.title}
                               onClick={() => {
                                 setFocusEvidenceId(item.id);
                                 if (source)
@@ -3948,9 +4238,12 @@ export default function Home() {
                                   );
                               }}
                             >
-                              <b>{item.timestamp}</b>
+                              <b>{item.timestamp || "NO TIME"}</b>
                               <span>
                                 {source?.creator ?? "Source"}
+                                {presentation.label
+                                  ? ` · ${presentation.label}`
+                                  : ""}
                                 <small>“{item.text}”</small>
                               </span>
                             </button>

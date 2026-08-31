@@ -19,7 +19,8 @@ Useful information is scattered across long YouTube videos. Existing agents can 
 - A `record_video_evidence` cross-tab tool so ChatGPT can write sources and timestamped moments researched in other tabs back into LiveSignal.
 - Optional browser-extension evidence import when serverless caption access is unavailable.
 - Searchable timed evidence plus a directly editable, publishable report.
-- 36 semantic WebMCP tools operating on the same visible state as the human UI.
+- 37 semantic WebMCP tools operating on the same visible state as the human UI.
+- An optional agent-identity handshake so the workspace can show the connected client (for example, ChatGPT or Claude Code) without assuming every WebMCP host exposes its name.
 - A renewable collaboration session where saved human layout changes and comments reach the active agent without repeating the context in chat.
 - Human-directed AI illustrations for selected cards, visibly labelled and kept separate from source evidence.
 
@@ -40,7 +41,7 @@ The latest unpacked demo bundle is available from the hosted site as `livesignal
 
 ### Companion page
 
-The universal surface includes `begin_research`, `open_youtube_search`, `ingest_youtube_video`, `record_video_evidence`, `search_video_evidence`, `write_report`, renewable collaboration waits, scoped comment handling, `generate_canvas_image`, evidence pinning, report revision, timestamp navigation, and publication tools.
+The universal surface includes `identify_agent`, `begin_research`, `open_youtube_search`, `ingest_youtube_video`, `record_video_evidence`, `search_video_evidence`, `write_report`, renewable collaboration waits, scoped comment handling, `generate_canvas_image`, evidence pinning, report revision, timestamp navigation, and publication tools. The first tool call marks an anonymous WebMCP client as seen. Clients should also call `identify_agent` on opening or reconnecting with a display name and optional capabilities; browser WebMCP alone does not expose a client name or durable connection state.
 
 ## Agent skill/plugin
 
