@@ -85,6 +85,7 @@ test("keeps generated image bytes server-side and labels them as illustration", 
   );
   assert.match(route, /OPENAI_API_KEY/);
   assert.match(route, /VERCEL_OIDC_TOKEN/);
+  assert.match(route, /x-vercel-oidc-token/);
   assert.match(route, /AI_GATEWAY_API_KEY/);
   assert.match(route, /prodia\/flux-fast-schnell/);
   assert.match(route, /feature:canvas-illustration/);

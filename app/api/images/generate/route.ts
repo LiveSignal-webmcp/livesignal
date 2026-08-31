@@ -42,8 +42,12 @@ export async function POST(request: Request) {
   if (!sameOrigin(request))
     return Response.json({ error: "Origin is not allowed." }, { status: 403 });
   const apiKey = process.env.OPENAI_API_KEY;
+  const gatewayToken =
+    process.env.AI_GATEWAY_API_KEY ||
+    process.env.VERCEL_OIDC_TOKEN ||
+    request.headers.get("x-vercel-oidc-token");
   const hasGatewayAuth = Boolean(
-    process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN,
+    gatewayToken,
   );
   if (!apiKey && !hasGatewayAuth)
     return Response.json(
@@ -98,6 +102,9 @@ export async function POST(request: Request) {
         aspectRatio: "1:1",
         maxRetries: 1,
         abortSignal: AbortSignal.timeout(50_000),
+        headers: gatewayToken
+          ? { Authorization: `Bearer ${gatewayToken}` }
+          : undefined,
         providerOptions: {
           gateway: {
             tags: ["feature:canvas-illustration", "app:livesignal"],
