@@ -6,6 +6,7 @@ import {
   acknowledgeSavedRevisions,
   findTranscriptMatch,
   normalizeEvidenceTiming,
+  reserveUniqueEvidenceId,
 } from "@/lib/evidence";
 import {
   DISHES,
@@ -1463,6 +1464,11 @@ export default function Home() {
     const transcriptPool = live.current.evidence.filter(
       (entry) => entry.sourceId === sourceId && entry.origin === "transcript",
     );
+    const reservedEvidenceIds = new Set(
+      live.current.evidence
+        .filter((entry) => entry.sourceId !== sourceId)
+        .map((entry) => entry.id),
+    );
     const segments = (
       Array.isArray(input.evidence)
         ? (input.evidence as Array<Record<string, unknown>>)
@@ -1473,7 +1479,12 @@ export default function Home() {
         const text = String(item.text ?? "");
         const match = findTranscriptMatch(text, timing, transcriptPool);
         return {
-          id: String(item.id ?? `${sourceId}-agent-${index}`),
+          id: reserveUniqueEvidenceId(
+            item.id,
+            `${sourceId}-agent-${index}`,
+            sourceId,
+            reservedEvidenceIds,
+          ),
           sourceId,
           text: text.trim(),
           seconds: match ? match.seconds : timing.seconds,

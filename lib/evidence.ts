@@ -60,6 +60,25 @@ export function normalizeEvidenceTiming(
   };
 }
 
+export function reserveUniqueEvidenceId(
+  preferredId: unknown,
+  fallbackId: string,
+  sourceId: string,
+  reservedIds: Set<string>,
+) {
+  const preferred = String(preferredId ?? "").trim();
+  const base = preferred || fallbackId;
+  let candidate = base;
+  if (reservedIds.has(candidate)) candidate = `${sourceId}-${base}`;
+  let suffix = 2;
+  while (reservedIds.has(candidate)) {
+    candidate = `${sourceId}-${base}-${suffix}`;
+    suffix += 1;
+  }
+  reservedIds.add(candidate);
+  return candidate;
+}
+
 function normalizedWords(value: string) {
   return value
     .toLocaleLowerCase()

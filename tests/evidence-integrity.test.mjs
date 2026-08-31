@@ -5,6 +5,7 @@ import {
   acknowledgeSavedRevisions,
   findTranscriptMatch,
   normalizeEvidenceTiming,
+  reserveUniqueEvidenceId,
 } from "../lib/evidence.ts";
 
 test("normalizes evidence timing without fabricating or contradicting moments", () => {
@@ -105,4 +106,17 @@ test("acknowledgement never consumes unsaved human revisions", () => {
       ?.acknowledged,
     false,
   );
+});
+
+test("agent evidence IDs stay globally unique across video sources", () => {
+  const reserved = new Set(["moment", "video-two-moment"]);
+  assert.equal(
+    reserveUniqueEvidenceId("moment", "fallback", "video-two", reserved),
+    "video-two-moment-2",
+  );
+  assert.equal(
+    reserveUniqueEvidenceId("moment", "fallback", "video-three", reserved),
+    "video-three-moment",
+  );
+  assert.equal(reserved.size, 4);
 });
