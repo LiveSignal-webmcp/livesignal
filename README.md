@@ -6,6 +6,10 @@ LiveSignal is a universal WebMCP video-research workspace. A person gives ChatGP
 
 It is deliberately an adapter, not a streaming platform. The LiveSignal web app is the primary WebMCP surface; its tools let ChatGPT operate the research workspace directly. The browser extension adds optional native-caption and realtime-STT evidence on YouTube and Twitch, while the bundled skill documents the end-to-end workflow.
 
+## Why WebMCP
+
+Video research is a shared, stateful task: the agent needs structured access to the same brief, sources, evidence, and canvas that the person can see and edit. WebMCP turns LiveSignal's visible interface into that shared workspace. The agent can research videos, attach timestamped proof, and revise individual cards, while the person controls the goal, wording, layout, visual direction, and final approval without copying context back and forth through chat.
+
 ## The problem
 
 Useful information is scattered across long YouTube videos. Existing agents can navigate a player, but that does not automatically create a searchable, cited research artifact a person can inspect and edit.
@@ -22,7 +26,7 @@ Useful information is scattered across long YouTube videos. Existing agents can 
 - 37 semantic WebMCP tools operating on the same visible state as the human UI.
 - An optional agent-identity handshake so the workspace can show the connected client (for example, ChatGPT or Claude Code) without assuming every WebMCP host exposes its name.
 - A renewable collaboration session where saved human layout changes and comments reach the active agent without repeating the context in chat.
-- Human-directed AI illustrations for selected cards, visibly labelled and kept separate from source evidence.
+- Human-directed AI illustrations or optional full-card backdrops for selected cards, visibly labelled and kept separate from source evidence.
 
 ### Browser adapter
 

@@ -63,6 +63,10 @@ test("exposes renewable WebMCP collaboration and browser-agent tools", async () 
   assert.match(page, /"wait_for_collaboration_event"/);
   assert.match(page, /"finish_canvas_collaboration"/);
   assert.match(page, /"generate_canvas_image"/);
+  assert.match(page, /Generate backdrop/);
+  assert.match(page, /"background"/);
+  assert.match(page, /backgroundImage\?: CanvasImage/);
+  assert.match(page, /preserve the card text, citations, source thumbnails/);
   assert.match(page, /Create visual/);
   assert.match(page, /AI-GENERATED ILLUSTRATION/);
   assert.match(page, /Ask agent to create/);

@@ -1788,6 +1788,23 @@ a {
 .canvas-block.kind-quote > p {
   font: 500 16px/1.35 Fraunces, serif;
 }
+.canvas-block.has-background {
+  background-position: center;
+  background-size: cover;
+}
+.canvas-block.has-background > * {
+  position: relative;
+  z-index: 1;
+}
+.canvas-card-background-label {
+  display: inline-flex;
+  margin: 13px 0 -2px;
+  padding: 4px 6px;
+  background: rgba(33, 30, 26, 0.76);
+  color: #fff7e9;
+  font: 700 6px "DM Mono", monospace;
+  letter-spacing: 0.7px;
+}
 .canvas-block-topline {
   display: flex;
   align-items: center;

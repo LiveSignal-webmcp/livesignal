@@ -62,6 +62,7 @@ type CanvasImage = {
   prompt: string;
   model: string;
   generatedAt: string;
+  placement: "inline" | "background";
 };
 
 type CanvasBlock = {
@@ -73,6 +74,7 @@ type CanvasBlock = {
   span: CanvasBlockSpan;
   accent: "coral" | "sage" | "gold" | "ink";
   image?: CanvasImage;
+  backgroundImage?: CanvasImage;
 };
 
 type AgentProjectPayload = {
@@ -159,6 +161,7 @@ type AgentComment = {
   blockId?: string;
   blockTitle?: string;
   blockBody?: string;
+  visualPlacement?: CanvasImage["placement"];
   evidenceIds: string[];
   status: AgentCommentStatus;
   createdAt: string;
@@ -769,6 +772,7 @@ export default function Home() {
     query: string,
     kind: AgentCommentKind,
     blockId?: string,
+    visualPlacement?: CanvasImage["placement"],
   ) {
     const cleanQuery = query.trim();
     if (!cleanQuery) return null;
@@ -780,6 +784,7 @@ export default function Home() {
       blockId: block?.id,
       blockTitle: block?.title,
       blockBody: block?.body,
+      ...(visualPlacement ? { visualPlacement } : {}),
       evidenceIds: block?.evidenceIds ?? [],
       status: "pending",
       createdAt: new Date().toISOString(),
@@ -811,15 +816,26 @@ export default function Home() {
     setAgentCommentQuery("");
   }
 
-  function requestCanvasVisual(block: CanvasBlock, regenerate = false) {
+  function requestCanvasVisual(
+    block: CanvasBlock,
+    placement: CanvasImage["placement"] = "inline",
+    regenerate = false,
+    sendImmediately = false,
+  ) {
     setSelectedCanvasId(block.id);
     setAgentCommentScope("block");
     setAgentCommentKind("create-visual");
-    setAgentCommentQuery(
-      regenerate
-        ? `Create a new visual direction for this card. Keep the ${canvasTheme.replace("-", " ")} mood, but make the composition more distinctive and shareable.`
-        : `Create an editorial illustration for this card that matches the ${canvasTheme.replace("-", " ")} canvas mood.`,
-    );
+    const direction =
+      placement === "background"
+        ? `Create a full-card background for this card. Keep the ${canvasTheme.replace("-", " ")} mood, leave clear contrast for the card's text, and do not include words or source claims in the artwork.`
+        : regenerate
+          ? `Create a new visual direction for this card. Keep the ${canvasTheme.replace("-", " ")} mood, but make the composition more distinctive and shareable.`
+          : `Create an editorial illustration for this card that matches the ${canvasTheme.replace("-", " ")} canvas mood.`;
+    if (sendImmediately) {
+      createAgentComment(direction, "create-visual", block.id, placement);
+      return;
+    }
+    setAgentCommentQuery(direction);
     window.requestAnimationFrame(() =>
       agentCommentInputRef.current?.focus(),
     );
@@ -962,6 +978,8 @@ export default function Home() {
     blocks.forEach((block) => {
       if (block.image?.url.startsWith("blob:"))
         URL.revokeObjectURL(block.image.url);
+      if (block.backgroundImage?.url.startsWith("blob:"))
+        URL.revokeObjectURL(block.backgroundImage.url);
     });
   }
 
@@ -987,6 +1005,7 @@ export default function Home() {
     blockId: string,
     prompt: string,
     alt?: string,
+    placement: CanvasImage["placement"] = "inline",
   ) {
     const block = live.current.canvasBlocks.find((item) => item.id === blockId);
     const cleanPrompt = prompt.trim();
@@ -1006,6 +1025,7 @@ export default function Home() {
           title: block.title,
           body: block.body,
           theme: live.current.canvasTheme,
+          placement,
         }),
       });
       if (!response.ok) {
@@ -1023,9 +1043,16 @@ export default function Home() {
         prompt: cleanPrompt,
         model: response.headers.get("X-LiveSignal-Image-Model") ?? "OpenAI image model",
         generatedAt: new Date().toISOString(),
+        placement,
       };
-      const previousUrl = block.image?.url;
-      updateCanvasBlock(blockId, { image });
+      const previousUrl =
+        placement === "background"
+          ? block.backgroundImage?.url
+          : block.image?.url;
+      updateCanvasBlock(
+        blockId,
+        placement === "background" ? { backgroundImage: image } : { image },
+      );
       if (previousUrl?.startsWith("blob:")) URL.revokeObjectURL(previousUrl);
       addAgentEvent("Illustration added", `${block.title} · AI-generated`);
       setActivity("Agent added an AI-generated illustration");
@@ -1038,6 +1065,7 @@ export default function Home() {
           prompt: image.prompt,
           model: image.model,
           generatedAt: image.generatedAt,
+          placement: image.placement,
         },
       };
     } catch (error) {
@@ -1050,20 +1078,33 @@ export default function Home() {
     }
   }
 
-  function removeCanvasImage(blockId: string, humanInitiated = false) {
+  function removeCanvasImage(
+    blockId: string,
+    humanInitiated = false,
+    placement: CanvasImage["placement"] = "inline",
+  ) {
     const block = live.current.canvasBlocks.find((item) => item.id === blockId);
-    if (!block?.image) return { ok: false, error: "This card has no image." };
-    if (block.image.url.startsWith("blob:")) URL.revokeObjectURL(block.image.url);
-    updateCanvasBlock(blockId, { image: undefined });
+    const image =
+      placement === "background" ? block?.backgroundImage : block?.image;
+    if (!block || !image)
+      return { ok: false, error: `This card has no ${placement} image.` };
+    if (image.url.startsWith("blob:")) URL.revokeObjectURL(image.url);
+    updateCanvasBlock(
+      blockId,
+      placement === "background"
+        ? { backgroundImage: undefined }
+        : { image: undefined },
+    );
+    const imageLabel = placement === "background" ? "backdrop" : "illustration";
     if (humanInitiated) {
       recordHumanRevision(
         "canvas image",
-        `Removed AI-generated illustration from ${block.title}`,
+        `Removed AI-generated ${imageLabel} from ${block.title}`,
       );
     }
-    addAgentEvent("Illustration removed", block.title);
-    setActivity("AI-generated illustration removed");
-    return { ok: true, blockId };
+    addAgentEvent(`${imageLabel === "backdrop" ? "Backdrop" : "Illustration"} removed`, block.title);
+    setActivity(`AI-generated ${imageLabel} removed`);
+    return { ok: true, blockId, placement };
   }
 
   function addCanvasBlock(input?: Partial<CanvasBlock>) {
@@ -1088,6 +1129,8 @@ export default function Home() {
     const block = live.current.canvasBlocks.find((item) => item.id === id);
     if (block?.image?.url.startsWith("blob:"))
       URL.revokeObjectURL(block.image.url);
+    if (block?.backgroundImage?.url.startsWith("blob:"))
+      URL.revokeObjectURL(block.backgroundImage.url);
     setCanvasBlocks((current) => current.filter((block) => block.id !== id));
     setSelectedCanvasId((current) => (current === id ? "" : current));
     setPublished(false);
@@ -2743,12 +2786,13 @@ export default function Home() {
     );
     tool(
       "generate_canvas_image",
-      "Generates or replaces one AI illustration for a selected canvas card after the human asks for a visual. The result is visibly labeled as generated artwork and never treated as source evidence.",
+      "Generates or replaces one AI visual layer for a selected canvas card after the human asks. Inline illustrations and full-card backdrops are stored independently; generating either must preserve the card text, citations, source thumbnails, layout, and the other visual layer. Generated artwork is visibly labeled and never treated as source evidence.",
       async (input) =>
         generateCanvasImage(
           String(input.blockId ?? ""),
           String(input.prompt ?? ""),
           input.alt === undefined ? undefined : String(input.alt),
+          input.placement === "background" ? "background" : "inline",
         ),
       {
         type: "object",
@@ -2762,6 +2806,12 @@ export default function Home() {
           alt: {
             type: "string",
             description: "Concise accessible description of the intended image.",
+          },
+          placement: {
+            type: "string",
+            enum: ["inline", "background"],
+            description:
+              "Use background only when the human explicitly requests a full-card backdrop; otherwise use inline.",
           },
         },
         required: ["blockId", "prompt"],
@@ -3645,7 +3695,14 @@ export default function Home() {
                               selectedCanvasBlock?.id === block.id
                                 ? "selected"
                                 : ""
-                            }`}
+                            } ${block.backgroundImage ? "has-background" : ""}`}
+                            style={
+                              block.backgroundImage
+                                ? {
+                                    backgroundImage: `linear-gradient(135deg, rgba(255, 252, 244, 0.9), rgba(255, 252, 244, 0.78)), url("${block.backgroundImage.url}")`,
+                                  }
+                                : undefined
+                            }
                             draggable
                             key={block.id}
                             onDragStart={() => setDraggedCanvasId(block.id)}
@@ -3677,6 +3734,21 @@ export default function Home() {
                                 </button>
                                 <button
                                   type="button"
+                                  aria-label={`Generate a background for ${block.title}`}
+                                  disabled={imageGeneratingBlockId === block.id}
+                                  onClick={() =>
+                                    requestCanvasVisual(
+                                      block,
+                                      "background",
+                                      Boolean(block.backgroundImage),
+                                      true,
+                                    )
+                                  }
+                                >
+                                  Generate backdrop
+                                </button>
+                                <button
+                                  type="button"
                                   aria-label={`Edit ${block.title}`}
                                   onClick={() => setSelectedCanvasId(block.id)}
                                 >
@@ -3690,7 +3762,14 @@ export default function Home() {
                                 <span>Agent is making the illustration</span>
                               </div>
                             )}
-                            {block.image && imageGeneratingBlockId !== block.id && (
+                            {block.backgroundImage &&
+                              imageGeneratingBlockId !== block.id && (
+                                <span className="canvas-card-background-label">
+                                  AI-GENERATED BACKDROP
+                                </span>
+                              )}
+                            {block.image &&
+                              imageGeneratingBlockId !== block.id && (
                               <figure className="canvas-card-image">
                                 {/* Blob URLs are generated in-session and cannot use Next image optimization. */}
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -4009,7 +4088,10 @@ export default function Home() {
                     </label>
                     <div
                       className={`canvas-visual-control ${
-                        selectedCanvasBlock.image ? "has-image" : ""
+                        selectedCanvasBlock.image ||
+                        selectedCanvasBlock.backgroundImage
+                          ? "has-image"
+                          : ""
                       }`}
                     >
                       <div>
@@ -4017,37 +4099,97 @@ export default function Home() {
                         <b>
                           {imageGeneratingBlockId === selectedCanvasBlock.id
                             ? "Agent is illustrating…"
-                            : selectedCanvasBlock.image
-                              ? "AI illustration attached"
+                            : selectedCanvasBlock.image &&
+                                selectedCanvasBlock.backgroundImage
+                              ? "Illustration and backdrop preserved"
+                              : selectedCanvasBlock.backgroundImage
+                                ? "AI backdrop applied to the full card"
+                                : selectedCanvasBlock.image
+                                  ? "AI illustration attached"
                               : "Turn this idea into an image"}
                         </b>
                       </div>
-                      {selectedCanvasBlock.image ? (
+                      {selectedCanvasBlock.image ||
+                      selectedCanvasBlock.backgroundImage ? (
                         <>
-                          <p>{selectedCanvasBlock.image.prompt}</p>
+                          {selectedCanvasBlock.image && (
+                            <p>
+                              Illustration · {selectedCanvasBlock.image.prompt}
+                            </p>
+                          )}
+                          {selectedCanvasBlock.backgroundImage && (
+                            <p>
+                              Backdrop · {selectedCanvasBlock.backgroundImage.prompt}
+                            </p>
+                          )}
                           <div className="canvas-visual-actions">
-                            <button
-                              type="button"
-                              disabled={
-                                imageGeneratingBlockId === selectedCanvasBlock.id
-                              }
-                              onClick={() =>
-                                requestCanvasVisual(selectedCanvasBlock, true)
-                              }
-                            >
-                              Ask for another
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                imageGeneratingBlockId === selectedCanvasBlock.id
-                              }
-                              onClick={() =>
-                                removeCanvasImage(selectedCanvasBlock.id, true)
-                              }
-                            >
-                              Remove image
-                            </button>
+                            {selectedCanvasBlock.image ? (
+                              <button
+                                type="button"
+                                disabled={
+                                  imageGeneratingBlockId ===
+                                  selectedCanvasBlock.id
+                                }
+                                onClick={() =>
+                                  removeCanvasImage(
+                                    selectedCanvasBlock.id,
+                                    true,
+                                    "inline",
+                                  )
+                                }
+                              >
+                                Remove illustration
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={
+                                  imageGeneratingBlockId ===
+                                  selectedCanvasBlock.id
+                                }
+                                onClick={() =>
+                                  requestCanvasVisual(selectedCanvasBlock)
+                                }
+                              >
+                                Ask for illustration
+                              </button>
+                            )}
+                            {selectedCanvasBlock.backgroundImage ? (
+                              <button
+                                type="button"
+                                disabled={
+                                  imageGeneratingBlockId ===
+                                  selectedCanvasBlock.id
+                                }
+                                onClick={() =>
+                                  removeCanvasImage(
+                                    selectedCanvasBlock.id,
+                                    true,
+                                    "background",
+                                  )
+                                }
+                              >
+                                Remove backdrop
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={
+                                  imageGeneratingBlockId ===
+                                  selectedCanvasBlock.id
+                                }
+                                onClick={() =>
+                                  requestCanvasVisual(
+                                    selectedCanvasBlock,
+                                    "background",
+                                    false,
+                                    true,
+                                  )
+                                }
+                              >
+                                Generate backdrop
+                              </button>
+                            )}
                           </div>
                         </>
                       ) : (
