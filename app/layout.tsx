@@ -6,9 +6,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("host") ?? "localhost:3000";
   const protocol = host.startsWith("localhost") ? "http" : "https";
-  const title = "LiveSignal — research anything across YouTube";
+  const title = "LiveSignal — turn YouTube videos into useful answers";
   const description =
-    "Turn YouTube research into a cited visual canvas you can shape, illustrate, and share together with your agent.";
+    "Ask a question, let ChatGPT find the useful parts of YouTube videos, then edit and share the visual guide it creates.";
 
   return {
     metadataBase: new URL(`${protocol}://${host}`),
@@ -22,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
           url: "/og.png",
           width: 1200,
           height: 630,
-          alt: "LiveSignal — collaborative video research.",
+          alt: "LiveSignal turns YouTube videos into editable visual guides.",
         },
       ],
     },

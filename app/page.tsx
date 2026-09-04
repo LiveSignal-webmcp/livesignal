@@ -196,7 +196,6 @@ const EXAMPLE_BRIEF: ResearchBrief = {
   outputFormat: "A practical 5-minute field guide",
 };
 
-const TOOL_COUNT = 37;
 const ENTRY_SUGGESTIONS = [
   {
     label: "Plan a food trip",
@@ -232,29 +231,29 @@ const AGENT_COMMENT_KINDS: Array<{
   {
     id: "verify",
     label: "Verify",
-    prompt: "Which claim should the agent verify against more video sources?",
+    prompt: "Which point should AI check against more videos?",
   },
   {
     id: "counterpoint",
     label: "Other view",
-    prompt: "What alternative perspective should the agent look for?",
+    prompt: "What other point of view should AI look for?",
   },
   {
     id: "improve",
     label: "Improve",
-    prompt: "How should the agent strengthen this part of the canvas?",
+    prompt: "How should AI improve this card?",
   },
   {
     id: "create-visual",
     label: "Create visual",
-    prompt: "Describe the illustration you want the agent to create for this card.",
+    prompt: "Describe the illustration you want AI to create for this card.",
   },
 ];
 const PHASES: Array<{ id: RunPhase; label: string }> = [
-  { id: "discovering", label: "Discover" },
-  { id: "extracting", label: "Extract" },
-  { id: "synthesizing", label: "Synthesize" },
-  { id: "review", label: "Review" },
+  { id: "discovering", label: "Find videos" },
+  { id: "extracting", label: "Watch" },
+  { id: "synthesizing", label: "Build" },
+  { id: "review", label: "Your review" },
 ];
 
 function timestampUrl(source: ResearchSource, seconds = 0) {
@@ -274,27 +273,27 @@ function evidencePresentation(item: EvidenceItem) {
     return {
       className: "",
       label: "",
-      title: "Timestamped transcript moment from the source video.",
+      title: "This quote links to the exact moment in the video.",
       verified: true,
     };
   }
   if (item.origin === "extension") {
     return {
       className: "captured",
-      label: "BROWSER CAPTURE",
+      label: "FROM VIDEO",
       title: item.timestamp
-        ? "Timestamped evidence captured from the active video page by the browser extension."
-        : "Browser-captured evidence without a timestamp.",
+        ? "This note links to the exact moment in the video."
+        : "This note came from the video but does not have an exact time.",
       verified: false,
     };
   }
   return {
     className: "unverified",
     label:
-      item.origin === "transcript" ? "TRANSCRIPT · NO TIMESTAMP" : "AGENT CLAIM",
+      item.origin === "transcript" ? "CAPTION · NO TIME" : "AI NOTE · CHECK",
     title: item.timestamp
-      ? "Agent-claimed moment, not matched to an imported transcript."
-      : "Agent claim with no timestamp supplied.",
+      ? "This AI note has not been matched to the video's captions."
+      : "This AI note has no exact video time yet.",
     verified: false,
   };
 }
@@ -356,7 +355,7 @@ export default function Home() {
   const [reportTitle, setReportTitle] = useState("Untitled research report");
   const [reportOverview, setReportOverview] = useState("");
   const [reportSections, setReportSections] = useState<ReportSection[]>([]);
-  const [activity, setActivity] = useState("Workspace ready for a new topic");
+  const [activity, setActivity] = useState("Ready for a new topic");
   const [runPhase, setRunPhase] = useState<RunPhase>("ready");
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [humanRevisions, setHumanRevisions] = useState<HumanRevision[]>([]);
@@ -594,7 +593,7 @@ export default function Home() {
 
   function identifyAgent(input: Record<string, unknown>) {
     const suppliedClient = String(input.client ?? input.name ?? "").trim();
-    const client = suppliedClient.slice(0, 80) || "Unknown WebMCP client";
+    const client = suppliedClient.slice(0, 80) || "AI assistant";
     const suppliedAgentId = String(input.agentId ?? "").trim();
     const agentId = suppliedAgentId.slice(0, 120) || undefined;
     const capabilities = Array.isArray(input.capabilities)
@@ -619,10 +618,10 @@ export default function Home() {
     };
     setConnectedAgent(agent);
     addAgentEvent(
-      sameAgent ? "Agent presence refreshed" : "Agent identified",
+      sameAgent ? "AI connection refreshed" : "AI connected",
       client,
     );
-    setActivity(`Agent identified · ${client}`);
+    setActivity(`AI connected · ${client}`);
     return {
       ok: true,
       agent,
@@ -635,15 +634,15 @@ export default function Home() {
     const current = live.current.connectedAgent;
     if (!current) {
       const anonymousAgent: ConnectedAgent = {
-        client: "WebMCP client",
+        client: "AI assistant",
         capabilities: [],
         identified: false,
         connectedAt: now,
         lastSeenAt: now,
       };
       setConnectedAgent(anonymousAgent);
-      addAgentEvent("WebMCP agent detected", "A client invoked a page tool");
-      setActivity("WebMCP agent detected · identify to show its name");
+      addAgentEvent("AI connected", "An AI assistant started working on the page");
+      setActivity("AI connected · working on your request");
       return;
     }
     setConnectedAgent({ ...current, lastSeenAt: now });
@@ -666,8 +665,8 @@ export default function Home() {
     };
     setCollaborationSession(session);
     setCollaborationPresence("paused");
-    addAgentEvent("Agent joined the canvas", "Live collaboration started");
-    setActivity("Agent joined · ready to listen for saved changes");
+    addAgentEvent("AI joined your guide", "Live editing started");
+    setActivity("AI is ready for your saved changes");
     window.location.hash = "canvas";
     return {
       ok: true,
@@ -734,13 +733,13 @@ export default function Home() {
       }),
     );
     addAgentEvent(
-      "Human saved canvas changes",
+      "You saved changes",
       `${sentRevisions.length} change${sentRevisions.length === 1 ? "" : "s"} · batch ${sequence}`,
     );
     setActivity(
       live.current.collaborationPresence === "listening"
-        ? "Saved changes sent to the active agent"
-        : "Changes saved for the agent",
+        ? "Saved changes sent to AI"
+        : "Changes saved",
     );
     return { ok: true, session, batch };
   }
@@ -763,8 +762,8 @@ export default function Home() {
         detail: { type: "session_finished", session: finished },
       }),
     );
-    addAgentEvent("Collaboration finished", reason.replaceAll("-", " "));
-    setActivity("Collaboration finished · canvas remains saved");
+    addAgentEvent("Editing finished", reason.replaceAll("-", " "));
+    setActivity("Editing finished · your guide remains saved");
     return { ok: true, status: "finished", session: finished };
   }
 
@@ -794,10 +793,10 @@ export default function Home() {
     setAgentComments((current) => [...current.slice(-11), comment]);
     setPublished(false);
     addAgentEvent(
-      "Human asked the agent",
-      block ? `${block.title} · ${cleanQuery}` : `Whole canvas · ${cleanQuery}`,
+      "You asked AI",
+      block ? `${block.title} · ${cleanQuery}` : `Whole guide · ${cleanQuery}`,
     );
-    setActivity("Comment sent · ready for agent research");
+    setActivity("Request sent to AI");
     window.dispatchEvent(
       new CustomEvent("livesignal:agent-comment", { detail: comment }),
     );
@@ -860,8 +859,8 @@ export default function Home() {
     );
     if (live.current.collaborationSession?.status === "active")
       setCollaborationPresence("responding");
-    addAgentEvent("Agent picked up a comment", existing.query);
-    setActivity("Agent is researching your canvas comment");
+    addAgentEvent("AI started your request", existing.query);
+    setActivity("AI is looking into your request");
     return { ok: true, commentId: id, status: "researching" };
   }
 
@@ -894,8 +893,8 @@ export default function Home() {
     );
     if (live.current.collaborationSession?.status === "active")
       setCollaborationPresence("paused");
-    addAgentEvent("Agent answered a canvas comment", cleanResponse);
-    setActivity("New research returned to the canvas");
+    addAgentEvent("AI answered your request", cleanResponse);
+    setActivity("New information added to your guide");
     window.location.hash = "canvas";
     return { ok: true, commentId: id, status: "answered" };
   }
@@ -1014,7 +1013,7 @@ export default function Home() {
       return { ok: false, error: "Describe the illustration to generate." };
 
     setImageGeneratingBlockId(blockId);
-    setActivity(`Agent is illustrating “${block.title}”`);
+    setActivity(`AI is illustrating “${block.title}”`);
     addAgentEvent("Image generation started", block.title);
     try {
       const response = await fetch("/api/images/generate", {
@@ -1055,7 +1054,7 @@ export default function Home() {
       );
       if (previousUrl?.startsWith("blob:")) URL.revokeObjectURL(previousUrl);
       addAgentEvent("Illustration added", `${block.title} · AI-generated`);
-      setActivity("Agent added an AI-generated illustration");
+      setActivity("AI added an illustration");
       return {
         ok: true,
         blockId,
@@ -1269,8 +1268,8 @@ export default function Home() {
     setEntryPrompt("");
     setActivity(
       agentListeningForRequest
-        ? "Your agent received the request"
-        : "Request ready · your active agent can begin",
+        ? "ChatGPT received your request"
+        : "Request ready · ChatGPT can begin",
     );
     window.dispatchEvent(
       new CustomEvent("livesignal:research-request", { detail: request }),
@@ -1548,7 +1547,7 @@ export default function Home() {
       url,
       title,
       creator: String(sourceInput.creator ?? "YouTube creator"),
-      city: "Agent research",
+      city: "Found by AI",
       duration: "BROWSER",
       relevance: String(
         sourceInput.relevance ??
@@ -1560,7 +1559,7 @@ export default function Home() {
     if (segments[0]) setFocusEvidenceId(segments[0].id);
     setRunPhase("extracting");
     addAgentEvent(
-      "Agent evidence recorded",
+      "Video moments added",
       `${title} · ${segments.length} moments · ${verifiedCount} verified, ${claimCount} agent claims`,
     );
     setActivity(
@@ -1635,7 +1634,7 @@ export default function Home() {
           url,
           title: String(sourceInput.title ?? "Agent-researched video"),
           creator: String(sourceInput.creator ?? "YouTube creator"),
-          city: "Agent research",
+          city: "Found by AI",
           duration: "BROWSER",
           relevance: String(
             sourceInput.relevance ??
@@ -1695,7 +1694,7 @@ export default function Home() {
       setPinnedIds(nextEvidence.map((item) => item.id));
       setFocusEvidenceId(nextEvidence[0].id);
       setEvidenceQuery("");
-      setReportTitle(String(reportInput.title ?? "Agent research report"));
+      setReportTitle(String(reportInput.title ?? "Your video guide"));
       setReportOverview(String(reportInput.overview ?? ""));
       setReportSections(sections);
       revokeCanvasImages();
@@ -1709,11 +1708,11 @@ export default function Home() {
       setAgentEvents([
         {
           id: crypto.randomUUID(),
-          label: "Agent run imported",
+          label: "Saved AI result imported",
           detail: `${nextSources.length} sources · ${nextEvidence.length} evidence moments · ${sections.length} report sections`,
         },
       ]);
-      setActivity("Agent research imported · ready for human review");
+      setActivity("Saved result imported · ready for your review");
       window.location.hash = "canvas";
     } catch (error) {
       setAgentResultError(
@@ -1879,7 +1878,7 @@ export default function Home() {
         const timeoutMs = Math.max(1000, Math.min(requestedMs, 45000));
         setAgentListening(true);
         setCollaborationPresence("listening");
-        setActivity("Agent is listening for saved canvas changes");
+        setActivity("AI is ready for your saved changes");
         return await new Promise((resolve) => {
           let settled = false;
           const finish = (result: Record<string, unknown>) => {
@@ -2025,7 +2024,7 @@ export default function Home() {
         );
         if (live.current.collaborationSession?.status === "active")
           setCollaborationPresence("paused");
-        setActivity("Agent caught up with human edits");
+        setActivity("AI has seen your latest edits");
         return {
           ok: true,
           acknowledged: acknowledgeAll
@@ -2152,7 +2151,7 @@ export default function Home() {
         const requestedMs = Number(input.timeoutMs ?? 30000);
         const timeoutMs = Math.max(1000, Math.min(requestedMs, 45000));
         setAgentListening(true);
-        setActivity("Agent is listening for your next canvas comment");
+        setActivity("AI is ready for your next request");
         return await new Promise((resolve) => {
           let settled = false;
           const finish = (result: Record<string, unknown>) => {
@@ -2286,7 +2285,7 @@ export default function Home() {
         };
         live.current = { ...live.current, brief: next };
         setBrief(next);
-        setActivity("Agent updated the research brief");
+        setActivity("AI updated your request");
         return { ok: true, brief: next };
       },
       {
@@ -2372,7 +2371,7 @@ export default function Home() {
           "Evidence searched",
           `${matches.length} matches for “${query}”`,
         );
-        setActivity(`Agent found ${matches.length} evidence matches`);
+        setActivity(`AI found ${matches.length} matching moments`);
         return { query, matches };
       },
       {
@@ -2433,7 +2432,7 @@ export default function Home() {
             ? input.evidenceIds.map(String)
             : undefined,
         });
-        setActivity("Agent revised a report section");
+        setActivity("AI revised a section");
         return { ok: true, sectionId: id };
       },
       {
@@ -2532,7 +2531,7 @@ export default function Home() {
           "Report delivered",
           `${nextSections.length} editable sections with source proof`,
         );
-        setActivity("Agent drafted the editable report");
+        setActivity("AI created your written draft");
         window.location.hash = "report";
         return {
           ok: true,
@@ -2611,7 +2610,7 @@ export default function Home() {
           String(input.instruction ?? "Report improved"),
         );
         setActivity(
-          `Agent revision applied · ${String(input.instruction ?? "report improved")}`,
+          `AI update applied · ${String(input.instruction ?? "guide improved")}`,
         );
         window.location.hash = "report";
         return { ok: true, instruction: input.instruction, droppedCitations };
@@ -2674,7 +2673,7 @@ export default function Home() {
         if (["notebook", "editorial", "field-notes"].includes(String(input.theme)))
           setCanvasTheme(String(input.theme) as CanvasTheme);
         setCanvasView("canvas");
-        setActivity("Agent composed the visual canvas");
+        setActivity("AI built your visual guide");
         window.location.hash = "canvas";
         return { ok: true, blockCount: nextBlocks.length };
       },
@@ -2766,7 +2765,7 @@ export default function Home() {
           patch.accent = String(input.accent) as CanvasBlock["accent"];
         updateCanvasBlock(id, patch);
         addAgentEvent("Canvas block revised", String(input.reason ?? id));
-        setActivity("Agent reacted to the human canvas edit");
+        setActivity("AI updated the card after your edit");
         return { ok: true, blockId: id };
       },
       {
@@ -2823,7 +2822,7 @@ export default function Home() {
       (input) => {
         const id = String(input.blockId ?? "");
         removeCanvasBlock(id);
-        setActivity("Agent simplified the canvas");
+        setActivity("AI simplified the guide");
         return { ok: true, removed: id };
       },
       {
@@ -2840,7 +2839,7 @@ export default function Home() {
           String(input.blockId ?? ""),
           Number(input.targetIndex ?? 0),
         );
-        setActivity("Agent adjusted the canvas composition");
+        setActivity("AI rearranged the guide");
         return { ok: true };
       },
       {
@@ -2860,7 +2859,7 @@ export default function Home() {
         if (!["notebook", "editorial", "field-notes"].includes(theme))
           return { ok: false, error: "Unknown canvas theme." };
         setCanvasTheme(theme);
-        setActivity("Agent restyled the canvas");
+        setActivity("AI changed the look and feel");
         return { ok: true, theme };
       },
       {
@@ -3028,9 +3027,9 @@ export default function Home() {
         <Brand />
         {workspaceActive ? (
           <div className="nav-links">
-            <a href="#brief">Direction</a>
-            <a href="#sources">Research</a>
-            <a href="#report">Canvas</a>
+            <a href="#brief">Request</a>
+            <a href="#sources">Videos</a>
+            <a href="#report">Guide</a>
           </div>
         ) : (
           <span className="consumer-nav-line">VIDEO KNOWLEDGE, MADE USEFUL</span>
@@ -3040,9 +3039,9 @@ export default function Home() {
           title={
             connectedAgent
               ? connectedAgent.identified
-                ? `${connectedAgent.client} identified itself through the LiveSignal WebMCP handshake.`
-                : "A WebMCP client invoked a page tool, but the browser did not provide its identity or a durable connection state."
-              : "WebMCP tools are available, but no agent has identified itself."
+                ? `${connectedAgent.client} is connected to LiveSignal.`
+                : "An AI assistant is using LiveSignal, but it did not share its name."
+              : "LiveSignal is ready to work with a supported AI assistant."
           }
         >
           <i />
@@ -3051,31 +3050,29 @@ export default function Home() {
               ? agentActivelyListening
                 ? `${connectedAgentLabel} listening`
                 : connectedAgent.identified
-                  ? `Agent · ${connectedAgentLabel}`
-                  : "Agent seen · WebMCP client"
-              : workspaceActive
-                ? `${TOOL_COUNT} WebMCP tools ready`
-                : "WebMCP ready"
+                  ? `${connectedAgentLabel} connected`
+                  : "AI connected"
+              : "Ready for ChatGPT"
             : mcp === "unavailable"
               ? "Open with ChatGPT"
               : mcp === "error"
-                ? "WebMCP unavailable"
-                : "Connecting agent"}
+                ? "ChatGPT connection unavailable"
+                : "Getting ready"}
         </div>
       </nav>
 
       {!workspaceActive && (
         <header className="consumer-hero" id="top">
           <div className="consumer-hero-copy">
-            <span className="consumer-eyebrow">LIVE SIGNAL · HUMAN + AGENT</span>
+            <span className="consumer-eyebrow">LIVE SIGNAL · VIDEO ANSWERS WITH AI</span>
             <h1>
               What do you
               <br />
               want to <em>do?</em>
             </h1>
             <p>
-              Tell LiveSignal your goal. Your agent researches the relevant
-              video internet and builds a beautiful plan you can edit and share.
+              Tell LiveSignal what you need. ChatGPT finds the useful parts of
+              relevant videos and builds a visual plan you can edit and share.
             </p>
           </div>
 
@@ -3084,7 +3081,7 @@ export default function Home() {
               <span>ONE REQUEST</span>
               <i className={agentListeningForRequest ? "listening" : ""}>
                 {agentListeningForRequest
-                  ? "● YOUR AGENT IS LISTENING"
+                  ? "● CHATGPT IS LISTENING"
                   : "NO SETUP FORM"}
               </i>
             </div>
@@ -3105,8 +3102,8 @@ export default function Home() {
             </label>
             <div className="consumer-entry-action">
               <p>
-                Your agent will find useful videos, keep timestamped proof, and
-                return with an editable visual plan.
+                ChatGPT finds useful videos, saves the exact moments that matter,
+                and returns with an editable visual plan.
               </p>
               <button
                 type="button"
@@ -3139,7 +3136,7 @@ export default function Home() {
             <i />
             <div>
               <b>02</b>
-              <span>Agent researches video</span>
+              <span>AI finds the best videos</span>
             </div>
             <i />
             <div>
@@ -3166,15 +3163,15 @@ export default function Home() {
           <div>
             <span className="section-no">
               {goal
-                ? "AGENT RESEARCH IN PROGRESS"
-                : "CHATGPT-CONTROLLED WORKSPACE"}
+                ? "CHATGPT IS WORKING"
+                : "YOUR VIDEO PROJECT"}
             </span>
-            <h2>{goal || "Ask ChatGPT to research anything across video"}</h2>
+            <h2>{goal || "Ask ChatGPT to find answers across video"}</h2>
           </div>
           <div className="activity">
             <span className="agent-pulse" />
             <p>
-              <b>LiveSignal agent</b>
+              <b>LiveSignal AI</b>
               {activity}
             </p>
           </div>
@@ -3184,7 +3181,7 @@ export default function Home() {
           <div className="agent-console-status">
             <span className="agent-orbit">AI</span>
             <div>
-              <small>CHATGPT → LIVESIGNAL</small>
+              <small>LIVE PROGRESS</small>
               <h3>
                 {runPhase === "ready"
                   ? "Waiting for your request in ChatGPT"
@@ -3194,7 +3191,7 @@ export default function Home() {
               </h3>
             </div>
           </div>
-          <div className="agent-progress" aria-label="Agent research progress">
+          <div className="agent-progress" aria-label="Research progress">
             {PHASES.map((phase, index) => {
               const currentIndex = PHASES.findIndex(
                 (item) => item.id === runPhase,
@@ -3218,17 +3215,17 @@ export default function Home() {
                   : "caught-up"
               }`}
             >
-              <b>HUMAN → AGENT</b>
+              <b>YOUR EDITS</b>
               <span>
                 {unsentHumanRevisions.length
                   ? `${unsentHumanRevisions.length} unsaved change${unsentHumanRevisions.length === 1 ? "" : "s"}`
                   : sentHumanRevisions.length
-                    ? `${sentHumanRevisions.length} saved change${sentHumanRevisions.length === 1 ? "" : "s"} waiting for agent`
+                    ? `${sentHumanRevisions.length} saved change${sentHumanRevisions.length === 1 ? "" : "s"} waiting for AI`
                     : collaborationPresence === "listening"
-                      ? "Agent listening for your next save"
+                      ? "AI is ready for your next change"
                       : collaborationPresence === "responding"
-                        ? "Agent responding to the canvas"
-                        : "Shared draft caught up"}
+                        ? "AI is updating your guide"
+                        : "Everything is up to date"}
               </span>
             </div>
             {agentEvents.length ? (
@@ -3242,8 +3239,8 @@ export default function Home() {
               <p>
                 <b>No setup form required</b>
                 <span>
-                  ChatGPT will create the brief, add sources, extract evidence,
-                  and compose the visual guide through this page’s WebMCP tools.
+                  ChatGPT will find videos, save the most useful moments, and
+                  build your visual guide right on this page.
                 </span>
               </p>
             )}
@@ -3254,8 +3251,8 @@ export default function Home() {
           <aside className="brief-panel" id="brief">
             <PanelLabel
               number="01"
-              title="Research brief"
-              sub="Human direction"
+              title="What you asked for"
+              sub="Your direction"
             />
             <h3>Your goal is enough.</h3>
             <div className="brief-goal-card">
@@ -3264,19 +3261,19 @@ export default function Home() {
             </div>
             <details className="brief-refine">
               <summary>
-                <span>Refine the request</span>
+                <span>Add more detail</span>
                 <small>Optional</small>
               </summary>
               <div className="brief-collaboration-note">
-                <span>LIVE SHARED BRIEF</span>
+                <span>OPTIONAL DETAILS</span>
                 <p>
                   Add detail only when it matters. Save your edits when you are
-                  ready for the active agent to react.
+                  ready for ChatGPT to continue.
                 </p>
               </div>
               <div className="brief-live-editor">
                 <label className="brief-field research-request-field">
-                <span>Research request</span>
+                <span>Your request</span>
                 <textarea
                   value={goal}
                   onChange={(event) => {
@@ -3285,7 +3282,7 @@ export default function Home() {
                     recordHumanRevision("research request", event.target.value);
                   }}
                   placeholder="Waiting for ChatGPT to begin a project…"
-                  aria-label="Research request"
+                  aria-label="Your request"
                 />
                 </label>
                 <label className="brief-field">
@@ -3304,7 +3301,7 @@ export default function Home() {
                 />
                 </label>
                 <label className="brief-field">
-                <span>Constraints</span>
+                <span>Preferences or limits</span>
                 <textarea
                   value={brief.constraints}
                   onChange={(event) => {
@@ -3315,11 +3312,11 @@ export default function Home() {
                     recordHumanRevision("constraints", event.target.value);
                   }}
                   placeholder="Exclude, prioritise, recency, budget, point of view…"
-                  aria-label="Research constraints"
+                  aria-label="Preferences or limits"
                 />
                 </label>
                 <label className="brief-field">
-                <span>Deliverable</span>
+                <span>What to create</span>
                 <input
                   value={brief.outputFormat}
                   onChange={(event) => {
@@ -3329,7 +3326,7 @@ export default function Home() {
                     }));
                     recordHumanRevision("deliverable", event.target.value);
                   }}
-                  aria-label="Research deliverable"
+                  aria-label="What to create"
                 />
                 </label>
               </div>
@@ -3337,8 +3334,8 @@ export default function Home() {
             <div className="brief-prompt">
               <span>YOUR ROLE</span>
               <p>
-                Let the agent do the watching. You inspect, shape, and approve
-                what becomes part of the final plan.
+                Let ChatGPT do the watching. You choose what matters, edit the
+                result, and approve the final plan.
               </p>
             </div>
           </aside>
@@ -3346,18 +3343,18 @@ export default function Home() {
           <section className="source-panel" id="sources">
             <PanelLabel
               number="02"
-              title="Source & evidence desk"
-              sub="Agent research, human judgment"
+              title="Videos and key moments"
+              sub="Found by AI · chosen by you"
             />
             <div className="agent-source-note">
-              <span>AGENT-OPERATED</span>
+              <span>FOUND FOR YOU</span>
               <p>
-                ChatGPT searches across tabs and records chosen videos and
-                timestamped proof here through WebMCP.
+                ChatGPT collects useful videos and links every important point
+                to the exact moment it came from.
               </p>
             </div>
             <details className="manual-controls">
-              <summary>Manual fallback controls</summary>
+              <summary>Add a video yourself</summary>
               <label className="source-search">
                 <span>⌕</span>
                 <input
@@ -3373,7 +3370,7 @@ export default function Home() {
               <div className="youtube-import">
                 <div>
                   <b>Import a real YouTube video</b>
-                  <span>Public metadata + timestamped captions</span>
+                  <span>Title, creator, and video captions</span>
                 </div>
                 <input
                   value={youtubeUrl}
@@ -3393,8 +3390,7 @@ export default function Home() {
               </div>
               {ingestError && (
                 <p className="ingest-error">
-                  {ingestError} The optional extension can collect native
-                  captions or realtime speech when server captions are blocked.
+                  {ingestError} You can still add notes from the video manually.
                 </p>
               )}
               <button
@@ -3407,26 +3403,26 @@ export default function Home() {
                   })
                 }
               >
-                Import latest extension evidence
+                Add notes saved by the browser
               </button>
               <div className="agent-result-import">
                 <div>
-                  <span>AGENT RETURN CHANNEL</span>
-                  <b>Import a complete browser-agent run</b>
+                  <span>ADVANCED</span>
+                  <b>Import saved AI results</b>
                   <p>
-                    Fallback for agent browsers without native WebMCP tool
-                    exposure. Sources, evidence, and citations remain editable.
+                    Bring back a previous result. Its videos, quotes, and links
+                    will stay editable.
                   </p>
                 </div>
                 <textarea
                   value={agentResultJson}
                   onChange={(event) => setAgentResultJson(event.target.value)}
-                  aria-label="Agent result JSON"
+                  aria-label="Saved AI result data"
                   placeholder='{"request":"…","sources":[…],"report":{"sections":[…]}}'
                   spellCheck={false}
                 />
                 <button type="button" onClick={applyAgentProject}>
-                  Apply agent result
+                Import result
                 </button>
               </div>
               {agentResultError && (
@@ -3436,16 +3432,16 @@ export default function Home() {
 
             <p className="coverage-note">
               <b>
-                {sources.length} real source{sources.length === 1 ? "" : "s"}
+                {sources.length} video{sources.length === 1 ? "" : "s"}
               </b>
               {" · "}
-              {timedEvidenceCount(evidence)} timestamped evidence segment
+              {timedEvidenceCount(evidence)} linked moment
               {timedEvidenceCount(evidence) === 1 ? "" : "s"}
               {evidence.some((item) => item.origin === "agent") && (
                 <>
                   {" · "}
                   {evidence.filter((item) => item.origin === "agent").length}{" "}
-                  agent claim
+                  AI note to check
                   {evidence.filter((item) => item.origin === "agent").length ===
                   1
                     ? ""
@@ -3456,11 +3452,11 @@ export default function Home() {
 
             {sources.length === 0 ? (
               <div className="empty-state source-empty">
-                <span>AGENT RESEARCHING</span>
+                <span>CHATGPT IS SEARCHING</span>
                 <h3>Your request is already in motion.</h3>
                 <p>
-                  Your active agent can now discover useful videos, verify exact
-                  moments, and return its evidence directly to this shared desk.
+                  ChatGPT is finding useful videos and saving the exact moments
+                  that answer your request.
                 </p>
               </div>
             ) : (
@@ -3480,12 +3476,12 @@ export default function Home() {
                       <i>▶</i>
                     </a>
                     <div className="source-copy">
-                      <span>{source.city} · SOURCE</span>
+                      <span>{source.city} · VIDEO</span>
                       <h4>{source.title}</h4>
                       <p>
                         {source.creator} · {source.relevance}
                       </p>
-                      <small>{source.transcriptCount} captured segments</small>
+                      <small>{source.transcriptCount} useful moments</small>
                     </div>
                     <button
                       className="include-button"
@@ -3511,12 +3507,12 @@ export default function Home() {
             {evidence.length > 0 && (
               <div className="transcript-engine">
                 <div>
-                  <span>EVIDENCE INDEX · {evidence.length} SEGMENTS</span>
+                  <span>KEY MOMENTS · {evidence.length}</span>
                   <input
                     value={evidenceQuery}
                     onChange={(event) => setEvidenceQuery(event.target.value)}
-                    placeholder="Search evidence"
-                    aria-label="Search imported captions"
+                    placeholder="Search key moments"
+                    aria-label="Search key moments"
                   />
                 </div>
                 <div>
@@ -3536,7 +3532,7 @@ export default function Home() {
                         <span>
                           {item.text}
                           <small>
-                            {presentation.label || "VERIFIED TRANSCRIPT"}
+                            {presentation.label || "FROM VIDEO CAPTIONS"}
                           </small>
                         </span>
                       </button>
@@ -3549,7 +3545,7 @@ export default function Home() {
             {focusEvidence && (
               <div className="evidence-focus">
                 <div className="evidence-head">
-                  <span>EVIDENCE IN FOCUS</span>
+                  <span>SELECTED MOMENT</span>
                   <button
                     className={
                       pinnedIds.includes(focusEvidence.id) ? "pinned" : ""
@@ -3586,9 +3582,9 @@ export default function Home() {
                   </button>
                   <span>
                     {evidencePresentation(focusEvidence).label ||
-                      "VERIFIED TRANSCRIPT"}
+                      "FROM VIDEO CAPTIONS"}
                     {focusEvidence.confidence
-                      ? ` · ${focusEvidence.confidence}% fixture confidence`
+                      ? ` · ${focusEvidence.confidence}% match`
                       : ""}
                   </span>
                 </div>
@@ -3602,8 +3598,8 @@ export default function Home() {
           <div className="guide-toolbar">
             <PanelLabel
               number="03"
-              title="Creation canvas"
-              sub="Human composes · agent reacts"
+              title="Your visual guide"
+              sub="Edit anything · AI helps"
               light
             />
             <div className="guide-actions">
@@ -3637,23 +3633,23 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="studio-mode-switch" aria-label="Creation studio view">
+          <div className="studio-mode-switch" aria-label="Choose a view">
             <button
               type="button"
               className={canvasView === "canvas" ? "active" : ""}
               onClick={() => setCanvasView("canvas")}
             >
-              Visual canvas
+              Visual guide
             </button>
             <button
               type="button"
               className={canvasView === "draft" ? "active" : ""}
               onClick={() => setCanvasView("draft")}
             >
-              Evidence draft
+              Written draft
             </button>
             <span>
-              {canvasBlocks.length} movable block
+              {canvasBlocks.length} movable card
               {canvasBlocks.length === 1 ? "" : "s"}
             </span>
           </div>
@@ -3663,19 +3659,18 @@ export default function Home() {
               <div className="canvas-stage">
                 {canvasBlocks.length === 0 ? (
                   <div className="empty-state canvas-empty">
-                    <span>THE SHARED ARTIFACT STARTS HERE</span>
-                    <h3>Turn the research into something worth sharing.</h3>
+                    <span>YOUR GUIDE STARTS HERE</span>
+                    <h3>Turn what ChatGPT found into something worth sharing.</h3>
                     <p>
-                      The agent creates evidence-backed blocks. You arrange,
-                      rewrite, resize, and personalize them while ChatGPT reacts
-                      through the page’s canvas tools.
+                      ChatGPT creates cards linked to the videos. You can arrange,
+                      rewrite, resize, and personalize every one.
                     </p>
                     <button
                       type="button"
                       disabled={reportSections.length === 0}
                       onClick={() => seedCanvas(reportSections)}
                     >
-                      Compose from research
+                      Build my visual guide
                     </button>
                   </div>
                 ) : (
@@ -3694,8 +3689,8 @@ export default function Home() {
                         <h2>{reportTitle}</h2>
                         <p>{reportOverview}</p>
                         <div>
-                          <b>{sources.length}</b> VIDEO SOURCES
-                          <b>{timedEvidenceCount(evidence)}</b> TIMED MOMENTS
+                          <b>{sources.length}</b> VIDEOS
+                          <b>{timedEvidenceCount(evidence)}</b> LINKED MOMENTS
                         </div>
                       </div>
                       {sources[0] && (
@@ -3705,7 +3700,7 @@ export default function Home() {
                             backgroundImage: `url(https://i.ytimg.com/vi/${sources[0].videoId}/hqdefault.jpg)`,
                           }}
                         >
-                          <span>FROM THE SOURCE DESK</span>
+                          <span>FROM THE VIDEOS</span>
                           <b>{sources[0].creator}</b>
                         </div>
                       )}
@@ -3747,7 +3742,7 @@ export default function Home() {
                                 ) && <i>● OPEN</i>}
                                 <button
                                   type="button"
-                                  aria-label={`Ask agent about ${block.title}`}
+                                  aria-label={`Ask AI about ${block.title}`}
                                   onClick={() => {
                                     setSelectedCanvasId(block.id);
                                     setAgentCommentScope("block");
@@ -3756,7 +3751,7 @@ export default function Home() {
                                     );
                                   }}
                                 >
-                                  Ask agent
+                                  Ask AI
                                 </button>
                                 <button
                                   type="button"
@@ -3785,13 +3780,13 @@ export default function Home() {
                             {imageGeneratingBlockId === block.id && (
                               <div className="canvas-card-image generating" aria-live="polite">
                                 <i />
-                                <span>Agent is making the illustration</span>
+                                <span>AI is making the illustration</span>
                               </div>
                             )}
                             {block.backgroundImage &&
                               imageGeneratingBlockId !== block.id && (
                                 <span className="canvas-card-background-label">
-                                  AI-GENERATED BACKDROP
+                                  MADE WITH AI
                                 </span>
                               )}
                             {block.image &&
@@ -3801,7 +3796,7 @@ export default function Home() {
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={block.image.url} alt={block.image.alt} />
                                 <figcaption>
-                                  <span>AI-GENERATED ILLUSTRATION</span>
+                                  <span>MADE WITH AI</span>
                                   <i aria-hidden="true">✦</i>
                                 </figcaption>
                               </figure>
@@ -3820,7 +3815,7 @@ export default function Home() {
                                     className={presentation.className}
                                     title={presentation.title}
                                   >
-                                    {item.timestamp || "NO TIMESTAMP"} ·{" "}
+                                    {item.timestamp || "NO TIME"} ·{" "}
                                     {source?.creator ?? "Source"}
                                     {presentation.label
                                       ? ` · ${presentation.label}`
@@ -3830,7 +3825,7 @@ export default function Home() {
                               })}
                               {blockEvidence.length === 0 && (
                                 <span className="personal-note">
-                                  HUMAN NOTE · NO SOURCE CLAIM
+                                  YOUR NOTE · NOT FROM A VIDEO
                                 </span>
                               )}
                             </div>
@@ -3840,7 +3835,7 @@ export default function Home() {
                     </div>
                     <footer className="canvas-signoff">
                       <span>MADE TOGETHER WITH LIVESIGNAL</span>
-                      <b>Research you can see, shape, and share.</b>
+                      <b>Answers you can see, shape, and share.</b>
                       <i>✦</i>
                     </footer>
                   </div>
@@ -3859,39 +3854,38 @@ export default function Home() {
                 >
                   <div className="collab-session-line">
                     <span>
-                      HUMAN ↔ {connectedAgentLabel || "AGENT"} LOOP
+                      YOU + {connectedAgentLabel || "AI"}
                     </span>
                     <i className={`collab-presence ${collaborationPresence}`}>
                       {collaborationPresence === "listening"
-                        ? "● AGENT LISTENING"
+                        ? "● AI READY"
                         : collaborationPresence === "responding"
-                          ? "● AGENT RESPONDING"
+                          ? "● AI WORKING"
                           : collaborationPresence === "finished"
                             ? "SESSION FINISHED"
                             : collaborationActive
                               ? "SESSION ACTIVE"
-                              : "SAVED WORKSPACE"}
+                              : "SAVED"}
                     </i>
                   </div>
                   <b>
                     {openAgentComments.length
-                      ? `${openAgentComments.length} comment${openAgentComments.length === 1 ? "" : "s"} in the agent loop`
+                      ? `${openAgentComments.length} request${openAgentComments.length === 1 ? "" : "s"} for AI`
                       : unsentHumanRevisions.length
                         ? `${unsentHumanRevisions.length} unsaved change${unsentHumanRevisions.length === 1 ? "" : "s"}`
                         : sentHumanRevisions.length
-                          ? `${sentHumanRevisions.length} change${sentHumanRevisions.length === 1 ? "" : "s"} sent to the agent`
+                          ? `${sentHumanRevisions.length} change${sentHumanRevisions.length === 1 ? "" : "s"} sent to AI`
                           : collaborationPresence === "listening"
-                            ? "Your agent is here"
+                            ? "AI is ready"
                             : collaborationPresence === "responding"
-                              ? "Your agent is working"
+                              ? "AI is working"
                               : collaborationPresence === "finished"
                                 ? "This collaboration is finished"
-                                : "Canvas and agent are caught up"}
+                                : "Everything is up to date"}
                   </b>
                   <p>
-                    Move, rewrite, or restyle the artifact freely. Save once
-                    when the composition is ready; an active agent receives the
-                    complete change batch through WebMCP.
+                    Move, rewrite, or restyle anything. When you save, ChatGPT
+                    sees all your changes and can continue from there.
                   </p>
                   <div className="collab-save-actions">
                     <button
@@ -3902,8 +3896,8 @@ export default function Home() {
                     >
                       <span>
                         {agentActivelyListening
-                          ? "Save & send to agent"
-                          : "Save for agent"}
+                          ? "Save & send to AI"
+                          : "Save changes"}
                       </span>
                       <b>{unsentHumanRevisions.length || "✓"}</b>
                     </button>
@@ -3924,8 +3918,8 @@ export default function Home() {
                       ? "Changes remain local until you save."
                       : sentHumanRevisions.length
                         ? agentActivelyListening
-                          ? "Delivered to the active agent."
-                          : "Queued safely until the agent reconnects."
+                          ? "Delivered to AI."
+                          : "Saved until AI reconnects."
                         : collaborationPresence === "finished"
                           ? "Start another project whenever you are ready."
                           : "Nothing new to send."}
@@ -3935,28 +3929,28 @@ export default function Home() {
                 <div className="agent-comment-desk">
                   <div className="agent-comment-heading">
                     <div>
-                      <span>COMMENT FOR AGENT</span>
+                      <span>ASK AI</span>
                       <b>
                         {agentCommentScope === "block" && selectedCanvasBlock
                           ? selectedCanvasBlock.title
-                          : "Whole canvas"}
+                          : "Whole guide"}
                       </b>
                     </div>
                     <i className={`agent-presence ${mcp} ${agentActivelyListening ? "listening" : ""}`}>
                       {agentActivelyListening
-                        ? `● ${connectedAgentLabel || "AGENT"} LISTENING`
+                        ? `● ${connectedAgentLabel || "AI"} READY`
                         : collaborationPresence === "responding"
-                          ? `● ${connectedAgentLabel || "AGENT"} RESPONDING`
+                          ? `● ${connectedAgentLabel || "AI"} WORKING`
                           : connectedAgent
                             ? connectedAgent.identified
-                              ? `AGENT · ${connectedAgentLabel}`
-                              : "AGENT SEEN · WEBMCP CLIENT"
+                              ? `${connectedAgentLabel} CONNECTED`
+                              : "AI CONNECTED"
                             : mcp === "registered"
-                              ? "WEBMCP READY"
-                              : "AGENT INBOX"}
+                              ? "READY FOR CHATGPT"
+                              : "AI INBOX"}
                     </i>
                   </div>
-                  <div className="agent-comment-scope" aria-label="Comment scope">
+                  <div className="agent-comment-scope" aria-label="Choose what AI should change">
                     <button
                       type="button"
                       className={agentCommentScope === "block" ? "active" : ""}
@@ -3970,7 +3964,7 @@ export default function Home() {
                       className={agentCommentScope === "canvas" ? "active" : ""}
                       onClick={() => setAgentCommentScope("canvas")}
                     >
-                      Whole canvas
+                      Whole guide
                     </button>
                   </div>
                   <div className="agent-comment-kinds">
@@ -3988,7 +3982,7 @@ export default function Home() {
                   <textarea
                     ref={agentCommentInputRef}
                     value={agentCommentQuery}
-                    aria-label="Comment for agent"
+                    aria-label="Ask AI"
                     placeholder={
                       AGENT_COMMENT_KINDS.find(
                         (kind) => kind.id === agentCommentKind,
@@ -4008,12 +4002,11 @@ export default function Home() {
                     disabled={!agentCommentQuery.trim()}
                     onClick={submitAgentComment}
                   >
-                    <span>Send to agent</span>
+                    <span>Ask AI</span>
                     <small>⌘↵</small>
                   </button>
                   <p className="agent-comment-boundary">
-                    The active WebMCP agent can pick this up without you
-                    repeating context in chat.
+                    ChatGPT already knows the videos and the card you are editing.
                   </p>
 
                   {visibleAgentComments.length > 0 && (
@@ -4022,30 +4015,30 @@ export default function Home() {
                         <article className={`agent-comment ${comment.status}`} key={comment.id}>
                           <div>
                             <span>
-                              {comment.blockTitle ?? "Whole canvas"} · {comment.kind.replace("-", " ")}
+                              {comment.blockTitle ?? "Whole guide"} · {comment.kind.replace("-", " ")}
                             </span>
                             <i>{comment.status}</i>
                           </div>
                           <p>{comment.query}</p>
                           {comment.status === "researching" && (
                             <small>
-                              <b>Agent is researching</b>
+                              <b>AI is looking into it</b>
                               {comment.plan ? ` · ${comment.plan}` : ""}
                             </small>
                           )}
                           {comment.status === "answered" && comment.response && (
                             <small>
-                              <b>Agent answer</b> · {comment.response}
+                              <b>AI answer</b> · {comment.response}
                               {(comment.addedEvidenceIds.length > 0 ||
                                 comment.updatedBlockIds.length > 0) && (
                                 <em>
-                                  +{comment.addedEvidenceIds.length} evidence · {comment.updatedBlockIds.length} card update{comment.updatedBlockIds.length === 1 ? "" : "s"}
+                                  +{comment.addedEvidenceIds.length} new moment{comment.addedEvidenceIds.length === 1 ? "" : "s"} · {comment.updatedBlockIds.length} card update{comment.updatedBlockIds.length === 1 ? "" : "s"}
                                 </em>
                               )}
                             </small>
                           )}
                           {comment.status === "pending" && (
-                            <small><b>Queued for the active agent</b></small>
+                            <small><b>Waiting for AI</b></small>
                           )}
                         </article>
                       ))}
@@ -4054,7 +4047,7 @@ export default function Home() {
                 </div>
 
                 <div className="canvas-control-group theme-picker">
-                  <span>CANVAS MOOD</span>
+                  <span>LOOK & FEEL</span>
                   <div>
                     {(["notebook", "editorial", "field-notes"] as CanvasTheme[]).map(
                       (theme) => (
@@ -4079,12 +4072,12 @@ export default function Home() {
 
                 {selectedCanvasBlock ? (
                   <div className="canvas-block-editor">
-                    <span>SELECTED BLOCK</span>
+                    <span>SELECTED CARD</span>
                     <label>
                       <small>Title</small>
                       <input
                         value={selectedCanvasBlock.title}
-                        aria-label="Canvas block title"
+                        aria-label="Card title"
                         onChange={(event) => {
                           updateCanvasBlock(selectedCanvasBlock.id, {
                             title: event.target.value,
@@ -4097,10 +4090,10 @@ export default function Home() {
                       />
                     </label>
                     <label>
-                      <small>Copy</small>
+                      <small>Text</small>
                       <textarea
                         value={selectedCanvasBlock.body}
-                        aria-label="Canvas block copy"
+                        aria-label="Card text"
                         onChange={(event) => {
                           updateCanvasBlock(selectedCanvasBlock.id, {
                             body: event.target.value,
@@ -4124,14 +4117,14 @@ export default function Home() {
                         <span>CARD VISUAL</span>
                         <b>
                           {imageGeneratingBlockId === selectedCanvasBlock.id
-                            ? "Agent is illustrating…"
+                            ? "AI is illustrating…"
                             : selectedCanvasBlock.image &&
                                 selectedCanvasBlock.backgroundImage
-                              ? "Illustration and backdrop preserved"
+                              ? "Illustration and background are ready"
                               : selectedCanvasBlock.backgroundImage
-                                ? "AI backdrop applied to the full card"
+                                ? "Background applied to the full card"
                                 : selectedCanvasBlock.image
-                                  ? "AI illustration attached"
+                                  ? "Illustration added"
                               : "Turn this idea into an image"}
                         </b>
                       </div>
@@ -4227,12 +4220,12 @@ export default function Home() {
                           }
                           onClick={() => requestCanvasVisual(selectedCanvasBlock)}
                         >
-                          <span>Ask agent to create</span>
+                          <span>Ask AI to create</span>
                           <i aria-hidden="true">✦</i>
                         </button>
                       )}
                       <small>
-                        Generated artwork is labeled and never used as source proof.
+                        AI artwork is clearly labeled and does not replace video sources.
                       </small>
                     </div>
                     <div className="canvas-inline-controls">
@@ -4324,12 +4317,12 @@ export default function Home() {
                         );
                       }}
                     >
-                      Remove block
+                      Remove card
                     </button>
                   </div>
                 ) : (
                   <p className="canvas-no-selection">
-                    Select a block on the canvas to edit it.
+                    Select a card to edit it.
                   </p>
                 )}
 
@@ -4353,7 +4346,7 @@ export default function Home() {
 
           <div className="guide-title-row">
             <div>
-              <p>VIDEO RESEARCH REPORT · HUMAN EDITABLE</p>
+              <p>YOUR WRITTEN GUIDE · EDIT ANYTHING</p>
               <input
                 value={reportTitle}
                 onChange={(event) => {
@@ -4365,7 +4358,7 @@ export default function Home() {
             </div>
             <span>
               {String(reportSections.length).padStart(2, "0")}
-              <small>report sections</small>
+              <small>sections</small>
             </span>
           </div>
           <textarea
@@ -4375,7 +4368,7 @@ export default function Home() {
               setReportOverview(event.target.value);
               recordHumanRevision("report overview", event.target.value);
             }}
-            placeholder="The agent’s overview appears here. Edit it directly, then ask the agent to revise again."
+            placeholder="ChatGPT’s summary appears here. Edit it directly or ask AI to revise it."
             aria-label="Report overview"
           />
 
@@ -4384,9 +4377,8 @@ export default function Home() {
               <span>YOUR REPORT STARTS HERE</span>
               <h3>ChatGPT will write into this page.</h3>
               <p>
-                The agent will create editable sections with timestamp citations
-                after it verifies the selected videos. You only need to review
-                and refine the result.
+                ChatGPT will create editable sections linked to exact moments in
+                the videos. You can review and change anything.
               </p>
             </div>
           ) : (
@@ -4429,7 +4421,7 @@ export default function Home() {
                       />
                     </div>
                     <div className="report-citations">
-                      <span>SOURCE PROOF · {citations.length}</span>
+                      <span>VIDEO MOMENTS · {citations.length}</span>
                       {citations.length ? (
                         citations.map((item) => {
                           const source = sources.find(
@@ -4464,7 +4456,7 @@ export default function Home() {
                           );
                         })
                       ) : (
-                        <p>No citations attached yet.</p>
+                        <p>No video moments linked yet.</p>
                       )}
                     </div>
                     <div className="dish-controls">
@@ -4516,9 +4508,9 @@ export default function Home() {
           )}
           <div className="guide-foot">
             <p>
-              <span>Evidence policy</span>
-              Canvas claims remain connected to inspectable source moments.
-              Personal notes stay visibly distinct from researched evidence.
+              <span>Why you can trust it</span>
+              Researched points link back to the videos. Your own notes are
+              always shown separately.
             </p>
             <div>
               <b>{pinnedIds.length}</b> pinned moments <b>{sources.length}</b>{" "}
@@ -4531,28 +4523,27 @@ export default function Home() {
       )}
 
       <section className="challenge-proof">
-        <p className="section-no">WHY WEBMCP</p>
-        <h2>The page stays in the conversation.</h2>
+        <p className="section-no">WHY LIVESIGNAL</p>
+        <h2>You and AI work on the same result.</h2>
         <div>
           <p>
-            <b>Human direction</b>
+            <b>You stay in charge</b>
             <span>
-              You define the question, inspect sources, compose the canvas, and
-              approve what gets published.
+              You ask the question, check the videos, edit the guide, and choose
+              what gets shared.
             </span>
           </p>
           <p>
-            <b>Agent scale</b>
+            <b>AI does the watching</b>
             <span>
-              The agent finds videos and structures hours of footage through
-              semantic page tools.
+              ChatGPT searches through hours of video and brings back the parts
+              that matter.
             </span>
           </p>
           <p>
-            <b>Shared creation</b>
+            <b>One shared result</b>
             <span>
-              Both work on one visible artifact—not an isolated chat answer or a
-              hidden automation.
+              You can see, edit, and improve the same visual guide together.
             </span>
           </p>
         </div>
@@ -4560,7 +4551,7 @@ export default function Home() {
       <footer>
         <Brand />
         <p>Hours of video → one visual guide you can trust and shape.</p>
-        <span>WebMCP Challenge · 2026</span>
+        <span>Built with WebMCP · 2026</span>
       </footer>
     </main>
   );
@@ -4571,7 +4562,7 @@ function Brand() {
     <a className="brand" href="#top">
       <span className="brand-seal">LS</span>
       <span>
-        LiveSignal<small>video research desk</small>
+        LiveSignal<small>turn videos into answers</small>
       </span>
     </a>
   );

@@ -24,10 +24,10 @@ test("server-renders a focused one-request consumer entry", async () => {
   const html = await response.text();
   assert.match(
     html,
-    /<title>LiveSignal — research anything across YouTube<\/title>/i,
+    /<title>LiveSignal — turn YouTube videos into useful answers<\/title>/i,
   );
   assert.match(html, /What do you want to/);
-  assert.match(html, /Tell LiveSignal your goal/i);
+  assert.match(html, /Tell LiveSignal what you need/i);
   assert.match(html, /What are you trying to accomplish/i);
   assert.match(html, /Build my plan/i);
   assert.match(html, /Plan a food trip/);
@@ -35,11 +35,11 @@ test("server-renders a focused one-request consumer entry", async () => {
   assert.match(html, /Cook something/);
   assert.match(html, /Compare options/);
   assert.match(html, /Say what you want/);
-  assert.match(html, /Agent researches video/);
+  assert.match(html, /AI finds the best videos/);
   assert.match(html, /You shape the result/);
   assert.match(html, /Share something useful/);
   assert.match(html, /See a finished food-planning example/i);
-  assert.match(html, /Connecting agent/i);
+  assert.match(html, /Getting ready/i);
   assert.doesNotMatch(html, /Manual fallback controls/);
   assert.doesNotMatch(html, /Must cover/);
   assert.doesNotMatch(html, /Comment for agent/);
@@ -68,10 +68,10 @@ test("exposes renewable WebMCP collaboration and browser-agent tools", async () 
   assert.match(page, /backgroundImage\?: CanvasImage/);
   assert.match(page, /preserve the card text, citations, source thumbnails/);
   assert.match(page, /Create visual/);
-  assert.match(page, /AI-GENERATED ILLUSTRATION/);
-  assert.match(page, /Ask agent to create/);
-  assert.match(page, /Save &amp; send to agent|Save & send to agent/);
-  assert.match(page, /Save for agent/);
+  assert.match(page, /MADE WITH AI/);
+  assert.match(page, /Ask AI to create/);
+  assert.match(page, /Save &amp; send to AI|Save & send to AI/);
+  assert.match(page, /Save changes/);
   assert.match(page, /Move earlier/);
   assert.match(page, /Move later/);
   assert.match(page, /livesignal-page-agent-bridge/);
