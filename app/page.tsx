@@ -2925,12 +2925,35 @@ export default function Home() {
     const bridgeId = "livesignal-page-agent-bridge";
     const existingBridge = document.getElementById(bridgeId);
     const bridge = existingBridge ?? document.createElement("output");
+    const toolNames = [...toolHandlers.keys()].sort();
     bridge.id = bridgeId;
-    bridge.hidden = true;
-    bridge.setAttribute("aria-hidden", "true");
+    bridge.hidden = false;
+    bridge.removeAttribute("aria-hidden");
+    bridge.className = "agent-bridge-control";
+    bridge.setAttribute("aria-label", "LiveSignal page agent response");
     bridge.dataset.status = "ready";
     bridge.dataset.toolCount = String(toolHandlers.size);
+    bridge.dataset.tools = JSON.stringify(toolNames);
+    bridge.textContent = JSON.stringify({
+      status: "ready",
+      transport: "webmcp-page-bridge",
+      toolCount: toolHandlers.size,
+      example: {
+        requestId: "unique-request-id",
+        name: "get_workspace_state",
+        input: {},
+      },
+    });
     if (!existingBridge) document.body.appendChild(bridge);
+
+    const instructionsId = "livesignal-page-agent-instructions";
+    const existingInstructions = document.getElementById(instructionsId);
+    const instructions = existingInstructions ?? document.createElement("span");
+    instructions.id = instructionsId;
+    instructions.className = "agent-bridge-control";
+    instructions.textContent =
+      "Browser agent fallback for LiveSignal WebMCP: fill the request control with JSON containing requestId, name, and input, then read the matching JSON response. Common tools include get_workspace_state, begin_research, write_report, create_canvas, add_canvas_block, and generate_canvas_image. The complete tool list is on the response element's data-tools attribute.";
+    if (!existingInstructions) document.body.appendChild(instructions);
 
     const requestControlId = "livesignal-page-agent-request";
     const existingRequestControl = document.getElementById(
@@ -2940,10 +2963,12 @@ export default function Home() {
       existingRequestControl ?? document.createElement("textarea");
     requestControl.id = requestControlId;
     requestControl.setAttribute("aria-label", "LiveSignal page agent request");
-    requestControl.setAttribute("aria-hidden", "true");
+    requestControl.setAttribute("aria-describedby", instructionsId);
+    requestControl.removeAttribute("aria-hidden");
     requestControl.tabIndex = -1;
-    requestControl.style.cssText =
-      "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:.01;overflow:hidden;padding:0;border:0;z-index:-1";
+    requestControl.className = "agent-bridge-control";
+    requestControl.placeholder =
+      '{"requestId":"unique-id","name":"get_workspace_state","input":{}}';
     if (!existingRequestControl) document.body.appendChild(requestControl);
 
     const onBridgeCall = async (rawRequest?: string) => {
@@ -2988,6 +3013,7 @@ export default function Home() {
       window.removeEventListener("livesignal:page-tool-call", onBridgeEvent);
       requestControl.removeEventListener("input", onRequestInput);
       if (!existingBridge) bridge.remove();
+      if (!existingInstructions) instructions.remove();
       if (!existingRequestControl) requestControl.remove();
       delete document.documentElement.dataset.livesignalPageAgent;
     };

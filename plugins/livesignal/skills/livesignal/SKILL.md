@@ -47,13 +47,13 @@ Use LiveSignal as a shared video research and creation desk operated primarily t
 
 ## Paired browser mode
 
-Prefer registered WebMCP tools. On the LiveSignal workspace, browser-control agents that cannot directly surface `document.modelContext` may invoke the identical registered handlers through the ordinary DOM. Confirm `document.documentElement.dataset.livesignalPageAgent === "ready"`, fill the textarea labelled `LiveSignal page agent request` with JSON containing a unique `requestId`, tool `name`, and `input`, then poll `#livesignal-page-agent-bridge` until its JSON text contains the matching response. Treat `{ok:false}` as a tool error. A main-world integration may instead set the bridge's `data-request` and dispatch `livesignal:page-tool-call`. This is the Codex/browser-control compatibility transport; it does not replace WebMCP registration.
+Prefer registered WebMCP tools. On the LiveSignal workspace, browser-control agents that cannot directly surface `document.modelContext` may invoke the identical registered handlers through the ordinary DOM. The request control and response output are accessibility-visible even though they are visually off-screen. Confirm `document.documentElement.dataset.livesignalPageAgent === "ready"`, fill the textarea labelled `LiveSignal page agent request` with JSON containing a unique `requestId`, tool `name`, and `input`, then poll the output labelled `LiveSignal page agent response` until its JSON text contains the matching response. Treat `{ok:false}` as a tool error. The response element's `data-tools` attribute contains the complete tool-name catalog. A main-world integration may instead set the bridge's `data-request` and dispatch `livesignal:page-tool-call`. This is the Codex/browser-control compatibility transport backed by the same handlers; it does not replace WebMCP registration.
 
 On a YouTube or Twitch source page, use the evidence snapshot as the compatibility path. Confirm `document.documentElement.dataset.livesignalAgent === "ready"`, then read and parse the ordinary DOM output `#livesignal-agent-state`. It contains current state, committed transcript segments, recent events, and watch rules. Poll it while listening; use normal browser controls for discovery, navigation, and seeking.
 
 Do not rely on `window.LiveSignalAgent` from an isolated browser-automation world. The global API remains available to same-world integrations, while the DOM output is the interoperable Codex browser-control path.
 
-Use this fallback only on a page where the LiveSignal extension is active. Do not imitate results when neither WebMCP nor the page bridge is present.
+The Companion page bridge requires only `document.documentElement.dataset.livesignalPageAgent === "ready"`; it does not require the optional livestream extension. Use the source-page evidence snapshot only when `document.documentElement.dataset.livesignalAgent === "ready"`. Do not imitate results when the corresponding bridge is absent.
 
 ## Evidence standard
 

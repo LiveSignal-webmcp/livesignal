@@ -75,6 +75,10 @@ test("exposes renewable WebMCP collaboration and browser-agent tools", async () 
   assert.match(page, /Move earlier/);
   assert.match(page, /Move later/);
   assert.match(page, /livesignal-page-agent-bridge/);
+  assert.match(page, /LiveSignal page agent response/);
+  assert.match(page, /bridge\.dataset\.tools/);
+  assert.match(page, /removeAttribute\("aria-hidden"\)/);
+  assert.match(page, /webmcp-page-bridge/);
   assert.match(page, /livesignal:page-tool-call/);
   assert.match(page, /canvasState\.canvasBlocks\.length/);
   const toolNames = [
